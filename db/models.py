@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -38,6 +39,9 @@ REPORT_STATUSES: tuple[str, ...] = (
 
 # financials.kind 허용 값 (PL / BS).
 FINANCIALS_KINDS: tuple[str, ...] = ("pl", "bs")
+
+# kb_ingestions.status 허용 값 — 지속 학습 적재 잡의 멱등성·재시도 추적 (SPEC §3.4).
+KB_INGESTION_STATUSES: tuple[str, ...] = ("pending", "success", "failed")
 
 
 def _in_clause(column: str, values: tuple[str, ...]) -> str:
@@ -163,3 +167,31 @@ class AgentRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class KbIngestion(Base):
+    """지속 학습 적재 감사 로그 (SPEC §3.2, §3.4).
+
+    `published` 발행 직후 비동기로 `past_consulting_cases`에 케이스를 적재한 이력.
+    멱등성(동일 draft_id 1회만 적재)을 위해 `draft_id`에 UNIQUE 제약을 둔다.
+    status(pending/success/failed)로 재시도를 추적한다.
+    """
+
+    __tablename__ = "kb_ingestions"
+    __table_args__ = (
+        UniqueConstraint("draft_id", name="uq_kb_ingestions_draft"),
+        CheckConstraint(
+            _in_clause("status", KB_INGESTION_STATUSES), name="ck_kb_ingestions_status"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    draft_id: Mapped[int] = mapped_column(
+        ForeignKey("report_drafts.id", ondelete="CASCADE"), nullable=False
+    )
+    case_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    masking_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    embedded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
