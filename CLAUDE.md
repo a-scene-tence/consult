@@ -21,7 +21,7 @@
 |------|------|------|
 | 데이터 처리 / 연산 | **Python 3.11+, Pandas** | PL/BS 확정 수치 계산의 유일 원천 |
 | 데이터베이스 | **PostgreSQL** | 확정 수치·초안·피드백·발행본·감사로그 |
-| 지식기반 RAG | **ChromaDB** | 업종 벤치마크·컨설팅 노하우 임베딩 검색 |
+| 지식기반 RAG | **ChromaDB** | `past_consulting_cases` 컬렉션 — 발행 후 **자동 임베딩 적재**(마스킹 필수), Agent 1·2가 업종+비율 밴드 유사도로 조회. 임베딩 모델 기본값은 로컬/오프라인 기본 임베딩(확정은 구현 단계). §2.4·§3.5 |
 | LLM | **Claude Messages API** (`claude-opus-4-8`) | adaptive thinking, structured outputs |
 | 오케스트레이션 | **커스텀 Python** | LangGraph 미사용 (§2 참조) |
 | 프론트엔드 | **HTML + TailwindCSS** | 관리자 백오피스 + 고객 대시보드 (반응형) |
@@ -47,6 +47,8 @@
 - 오케스트레이터(`orchestrator.py`)가: (1) DB에서 상태·입력 로드 → (2) 에이전트 호출 → (3) 출력 검증(§3) → (4) DB에 결과·상태 기록 → (5) 다음 전이.
 - 모든 에이전트 호출은 `agent_runs` 테이블에 감사 로그(입력/출력 해시, 모델, 지연, 검증 결과) 기록.
 - Agent 1·2는 서로 의존하지 않으므로 **병렬 호출** 가능. Agent 3은 둘의 결과를 기다린다.
+- Agent 1·2 호출 **직전**에 지속 학습 조회(§2.4)로 `rag_context`를 구성해 입력에 포함한다.
+- `published` 전이 **직후**, 오케스트레이터는 **비동기 KB 적재 훅**(§2.4)을 호출한다(발행 응답을 막지 않음).
 
 ### 2.3 Claude 호출 규약
 
@@ -54,6 +56,22 @@
 - 구조화 출력: `output_config={"format": {"type": "json_schema", "schema": ...}}`로 스키마 강제.
 - 확정 수치는 프롬프트에 JSON 주입(또는 tool-use로 DB 조회). 프리필(assistant 선행 turn) 사용 금지(400).
 - 재시도: SDK 기본 재시도에 의존하고, 검증 실패는 애플리케이션 레벨에서 최대 N회 재생성 후 `failed` 처리.
+
+### 2.4 지속 학습(Continuous Learning) 파이프라인 & 타임라인
+
+`SPEC.md §1.4`의 양방향 루프를 오케스트레이션 차원에서 다음과 같이 구현한다.
+
+- **적재(역방향, 발행 직후 비동기):**
+  1. `published` 전이 직후 KB 적재 훅을 **비동기**로 트리거(고객 대시보드 응답을 지연시키지 않음).
+  2. `published_reports` + `expert_feedback` 로드 → **마스킹**(§3.5) → `past_consulting_cases`
+     레코드 생성 → 임베딩 생성 → 컬렉션 upsert(`rag/case_indexer.py`).
+  3. **멱등성:** 동일 `draft_id`는 1회만 적재(재실행은 upsert). 성공/실패·`masking_version`을
+     `kb_ingestions`에 기록하고, 실패는 지수 백오프로 재시도. 마스킹 검증 실패 시 적재 중단·이슈 기록.
+- **조회(정방향, Agent 1·2 시작 시):**
+  1. 현재 고객의 **업종 + 재무 비율 밴드**로 쿼리 벡터 구성 → `past_consulting_cases`에서 top_k 조회.
+  2. **최소 유사도 임계값** 미달이면 `rag_context`를 주입하지 않는다(빈 컨텍스트로 진행).
+  3. 조회 결과는 주입 전 다시 마스킹 검증(§3.5)을 통과해야 한다(이중 방어).
+- 임계값·top_k·임베딩 모델 등 파라미터는 `.env`/설정으로 관리하고 기본값은 보수적으로 둔다.
 
 ---
 
@@ -86,6 +104,21 @@
 
 - 각 에이전트 출력에 `out_of_scope`/책임 범위 밖 주제가 본문에 섞이지 않았는지 경량 점검(키워드/구조 기반). 위반 시 경고 로그.
 
+### 3.5 RAG·마스킹 가드레일 (지속 학습)
+
+- **(a) 이중 마스킹.** 과거 케이스는 (1) 컬렉션 **적재 전**과 (2) `rag_context` **주입 전**
+  양쪽에서 마스킹한다(`rag/masking.py`). 처리 내용:
+  - 직접 식별자 제거: 고객명·`client_id`·사업자번호·대표자명·연락처·주소 등 PII 삭제.
+  - 재식별 가능 수치 일반화: 정확 금액·정확 비율을 **밴드(구간)**로 변환(예: 매출 "1~1.5억", `OPM "10-15%"`).
+    → 과거 케이스가 특정 고객을 특정하지 못하게 한다.
+- **(b) 주입 전 검증.** `rag_context`에 PII 패턴·정확 금액이 없는지 스캔. 잔존 감지 시 해당 케이스를
+  드롭하고 이슈로 기록(`pii_leak`, `BUGS_AND_LOGS.md`).
+- **(c) 정성 참고 원칙.** RAG는 노하우·벤치마크 밴드·전문가 교훈만 제공한다. `numeric_guard`(§3.2)는
+  **현재 고객 수치**에만 적용되며, 에이전트가 RAG 유래 밴드/과거 수치를 **현재 고객의 확정치로
+  인용**하면 위반으로 처리한다(P1, `SPEC.md §1.4`).
+- **(d) 신선도·품질.** 적재 케이스에는 `outcome_label`·`embedded_at`을 남겨, 노후·저품질 케이스가
+  신규 분석을 왜곡(`rag_contamination`)하지 않도록 임계값·정리 주기를 관리한다.
+
 ---
 
 ## 4. 디렉터리 구조 (안)
@@ -106,9 +139,11 @@ consult/
 │   ├── agent3_draft_report.json
 │   ├── expert_feedback.json
 │   ├── agent4_final_report.json
-│   └── dashboard_payload.json
+│   ├── dashboard_payload.json
+│   ├── rag_context.json         # Agent 1·2 RAG 입력 계약 (§SPEC 2.6)
+│   └── past_case.json           # past_consulting_cases 적재 레코드 계약
 ├── db/
-│   ├── migrations/              # PostgreSQL DDL 마이그레이션
+│   ├── migrations/              # PostgreSQL DDL 마이그레이션 (kb_ingestions 포함)
 │   └── models.py                # 테이블 접근 계층
 ├── compute/                     # 연산 레이어 (숫자 원천)
 │   ├── ingest.py                # raw 업로드 → 정형화
@@ -121,7 +156,10 @@ consult/
 │   ├── report_master.py         # Agent 3
 │   └── final_publisher.py       # Agent 4
 ├── rag/
-│   └── chroma_client.py         # ChromaDB 인덱싱/검색
+│   ├── chroma_client.py         # ChromaDB 컬렉션 접근(past_consulting_cases)
+│   ├── masking.py               # PII·정확 금액 마스킹/밴드화 (§3.5)
+│   ├── embed.py                 # 임베딩 생성(기본: 로컬/오프라인)
+│   └── case_indexer.py          # 발행 후 비동기 적재(마스킹→임베딩→upsert, §2.4)
 ├── guards/
 │   └── numeric_guard.py         # Strict Rule 검증 훅
 ├── orchestrator.py              # 상태 머신·파이프라인 제어
@@ -167,4 +205,5 @@ consult/
 - [ ] `numeric_guard` 및 스키마 검증 통과.
 - [ ] 역할 경계 위반 없음.
 - [ ] HITL 상태 전이가 `SPEC.md §3.1`과 일치.
+- [ ] (지속 학습 기능) 발행 시 마스킹·적재 검증 통과, `rag_context`에 PII·정확 금액 부재.
 - [ ] 관련 MD 문서 최신화 완료.

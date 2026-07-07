@@ -14,8 +14,8 @@
 ### [BUG-####] <한 줄 제목>
 - 일시: YYYY-MM-DD HH:MM (KST)
 - 심각도: Critical | High | Medium | Low
-- 카테고리: hallucination | context_loss | role_violation | contradiction | feedback_ignored | schema_violation | compute_error | infra
-- 관련 에이전트/모듈: Agent 1(PL) | Agent 2(BS) | Agent 3(리포트마스터) | Agent 4(발행가) | compute | orchestrator | web | db | rag
+- 카테고리: hallucination | context_loss | role_violation | contradiction | feedback_ignored | schema_violation | compute_error | infra | rag_contamination | similarity_mismatch | pii_leak
+- 관련 에이전트/모듈: Agent 1(PL) | Agent 2(BS) | Agent 3(리포트마스터) | Agent 4(발행가) | compute | orchestrator | web | db | rag | masking | case_indexer
 - 관련 리포트: <client_id> / <period> / <version> / <draft_id>
 - 상태: Open | Investigating | Fixed | Won't Fix | Regression-Guarded
 
@@ -58,6 +58,9 @@
 | `schema_violation` | 출력이 JSON Schema 위반 | 필드 누락/타입 오류 | `jsonschema` 검증(CLAUDE.md §3.3) |
 | `compute_error` | 연산 레이어 수치 오류 | 확정 수치 자체가 틀림 | `compute/` 골든 테스트 |
 | `infra` | API/DB/네트워크 오류 | 타임아웃, 429, 커넥션 | SDK 재시도, 상태 `failed` 후 재시도 |
+| `rag_contamination` | 과거 데이터 오염 — 노후·부정확·저품질 케이스가 신규 분석을 왜곡 | 오래된 벤치마크·틀린 교훈이 rag_context로 유입 | 적재 시 `outcome_label`·`embedded_at` 신선도 메타, 최소 유사도 임계값, 주기적 정리(CLAUDE.md §3.5) |
+| `similarity_mismatch` | 유사도 매칭 실패 — 무관 케이스가 매칭되어 잘못된 벤치마크 제공 | 다른 업종/재무구조 케이스가 top_k에 포함 | 업종 필터 + 비율 밴드 사전필터, 임계값 미달 시 `rag_context` 미주입(CLAUDE.md §2.4) |
+| `pii_leak` | 마스킹 실패로 PII·정확 금액이 과거 케이스/rag_context에 잔존 | 고객명·사업자번호·정확 매출액 노출 | 이중 마스킹, 주입 전 PII·금액 스캔, 잔존 시 케이스 드롭·적재 중단(CLAUDE.md §3.5) |
 
 ---
 
@@ -74,6 +77,13 @@
 - [ ] **상태 전이:** `report_drafts.status`가 SPEC §3.1의 허용 전이만 따랐는가?
 - [ ] **감사 로그:** `agent_runs`에 입력/출력 해시·모델·검증 결과가 기록됐는가?
 - [ ] **비밀 관리:** 프롬프트·로그·커밋에 키/PII가 노출되지 않았는가?
+
+**지속 학습(RAG) 가드 (적재/조회 시)**
+- [ ] **마스킹:** 적재 전·주입 전 이중 마스킹이 적용됐고, `rag_context`에 PII·정확 금액이 없는가?
+- [ ] **유사도 임계값:** 최소 유사도 미달 시 `rag_context`를 주입하지 않았는가(빈 컨텍스트)?
+- [ ] **과거 케이스 정합:** 저장된 케이스에 `client_id`/고객명/정확 금액/PII가 없는가(비율 밴드만)?
+- [ ] **오용 금지:** 에이전트가 RAG 유래 밴드/과거 수치를 현재 고객 확정치로 인용하지 않았는가(`numeric_guard` 통과)?
+- [ ] **적재 멱등성:** 동일 `draft_id` 중복 적재 없이 `kb_ingestions`에 결과가 기록됐는가?
 
 **발행(Publish) 게이트 (Critical 방지)**
 - [ ] 대시보드 수치가 `financials.*` 확정값과 100% 일치(프론트 재계산 없음).
@@ -147,6 +157,9 @@
 정식 버그는 아니지만 모니터링이 필요한 항목.
 
 - [ ] LLM 비결정성으로 동일 입력에도 서술 편차 → 검증 훅은 수치만 보장, 서술 품질은 리뷰로 보완.
-- [ ] ChromaDB RAG 컨텍스트가 오래되면 벤치마크 왜곡 → 지식기반 갱신 주기 관리 필요.
 - [ ] 큰 `max_tokens` 재작성 시 타임아웃 → 스트리밍 사용 검토.
 - [ ] 통화/기간 포맷 로케일 이슈(KRW, 분기 표기) → 표시 계층 단위 테스트.
+- [ ] **과거 데이터 오염(`rag_contamination`):** 노후·저품질 케이스가 신규 분석 왜곡 → 신선도 메타·outcome 라벨·주기적 정리, 임계값 관리.
+- [ ] **유사도 매칭 실패(`similarity_mismatch`):** 무관 케이스 매칭 → 잘못된 벤치마크 → 업종+비율 밴드 사전필터, 임계값 미달 시 미주입.
+- [ ] **임베딩 노후/드리프트:** 임베딩 모델 교체·업종 분포 변화로 유사도 품질 저하 → 재임베딩 주기·회귀 모니터링.
+- [ ] **마스킹 회귀(`pii_leak`):** 마스킹 규칙 변경으로 PII·정확 금액 유출 → 마스킹 골든 테스트·주입 전 스캔 상시 유지.
