@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/financials_pl.json",
+  "title": "financials.pl",
+  "description": "PL(손익계산서) 확정 수치 페이로드. 연산 레이어(compute_pl)만이 생성하는 유일 수치 원천이며, Agent 1(PL 분석가)의 입력이다. SPEC §2.6.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "accounts", "ratios", "milestones"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_id", "period", "prev_period", "currency", "computed_at"],
+      "properties": {
+        "client_id": { "type": "string" },
+        "period": { "type": "string", "description": "예: 2025-Q2" },
+        "prev_period": { "type": "string", "description": "예: 2025-Q1" },
+        "currency": { "type": "string", "description": "예: KRW" },
+        "computed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "accounts": {
+      "type": "array",
+      "description": "손익 계정과목별 확정 금액과 전기대비 증감률.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "amount", "prev_amount", "yoy_pct"],
+        "properties": {
+          "code": { "type": "string", "description": "예: REV, COGS, GP, OPEX, OP" },
+          "name": { "type": "string" },
+          "amount": { "type": "number" },
+          "prev_amount": { "type": "number" },
+          "yoy_pct": { "type": "number", "description": "전기대비 증감률(%)" }
+        }
+      }
+    },
+    "ratios": {
+      "type": "array",
+      "description": "수익성 비율. 예: GPM(매출총이익률), OPM(영업이익률).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "value_pct", "prev_value_pct"],
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "value_pct": { "type": "number" },
+          "prev_value_pct": { "type": "number" }
+        }
+      }
+    },
+    "milestones": {
+      "type": "array",
+      "description": "마일스톤 기반 성과(계획 대비 실적).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "planned", "actual", "variance_pct"],
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "planned": { "type": "number" },
+          "actual": { "type": "number" },
+          "variance_pct": { "type": "number", "description": "계획 대비 편차(%)" }
+        }
+      }
+    }
+  }
+}

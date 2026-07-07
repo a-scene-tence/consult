@@ -1,0 +1,28 @@
+# 비밀/설정
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# 테스트/캐시
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# 에디터/OS
+.vscode/
+.idea/
+.DS_Store
+
+# 로컬 데이터
+*.sqlite3

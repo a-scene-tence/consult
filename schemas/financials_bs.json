@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/financials_bs.json",
+  "title": "financials.bs",
+  "description": "BS(재무상태표) 확정 수치 페이로드. 연산 레이어(compute_bs)만이 생성하는 유일 수치 원천이며, Agent 2(BS 분석가)의 입력이다. SPEC §2.6.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "accounts", "ratios"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_id", "period", "currency", "computed_at"],
+      "properties": {
+        "client_id": { "type": "string" },
+        "period": { "type": "string", "description": "예: 2025-Q2" },
+        "currency": { "type": "string", "description": "예: KRW" },
+        "computed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "accounts": {
+      "type": "array",
+      "description": "재무상태표 계정과목별 확정 금액. 예: CA, CL, INV, AR, AP, DEBT, EQUITY.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "amount"],
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "amount": { "type": "number" }
+        }
+      }
+    },
+    "ratios": {
+      "type": "array",
+      "description": "재무 건전성 지표. 비율은 value_pct(%), 금액성 지표(운전자본 등)는 value 사용.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name"],
+        "anyOf": [
+          { "required": ["value_pct"] },
+          { "required": ["value"] }
+        ],
+        "properties": {
+          "code": { "type": "string", "description": "예: CR(유동비율), WC(운전자본), DR(부채비율)" },
+          "name": { "type": "string" },
+          "value_pct": { "type": "number" },
+          "value": { "type": "number" }
+        }
+      }
+    }
+  }
+}
