@@ -21,6 +21,22 @@ def accounts_to_frame(accounts: dict[str, dict[str, Any]]) -> pd.DataFrame:
     return frame
 
 
+def sample_client_profile() -> dict[str, Any]:
+    """CRM 고객 프로필 샘플 (SPEC §2.6 client_profile)."""
+    return {
+        "client_id": "C-1001",
+        "trade_name": "○○치킨 역삼점",
+        "industry": "치킨전문점",
+        "district_type": "office",
+        "location_raw": "서울 강남구 역삼동",
+        "owner_gender": "female",
+        "owner_age": 34,
+        "owner_age_band": "30대 초중반",
+        "risk_appetite": "conservative",
+        "onboarded_at": "2025-03-02",
+    }
+
+
 # ---------------------------------------------------------------------------
 # 당기(2025-Q3) 샘플
 # ---------------------------------------------------------------------------

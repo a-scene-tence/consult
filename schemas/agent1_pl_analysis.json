@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://consult.local/schemas/agent1_pl_analysis.json",
   "title": "agent1_pl_analysis",
-  "description": "Agent 1(PL 분석가) 출력 계약. SPEC §2.6. 서술·해석만 담으며 새로운 수치를 생성하지 않는다.",
+  "description": "Agent 1(PL 분석가) 출력 계약 v0.3. SPEC §2.1, §2.6. 서술·해석만 담으며 새 수치를 생성하지 않는다.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["agent", "summary", "findings", "milestone_review", "out_of_scope"],
+  "required": ["agent", "summary", "findings", "bep_guidance", "tax_risk_alerts", "adherence_review", "milestone_review", "out_of_scope"],
   "properties": {
     "agent": { "type": "string", "const": "pl_analyst" },
-    "summary": { "type": "string", "description": "PL 관점 종합 한두 문장." },
+    "summary": { "type": "string", "description": "PL 관점 종합 한두 문장(프로필 눈높이)." },
     "findings": {
       "type": "array",
       "items": {
@@ -16,17 +16,52 @@
         "additionalProperties": false,
         "required": ["topic", "text", "source_ref", "impact"],
         "properties": {
-          "topic": {
-            "type": "string",
-            "description": "예: profitability, cost_structure, op_margin"
-          },
+          "topic": { "type": "string", "description": "예: item_margin, cost_structure, op_margin, cross_analysis" },
           "text": { "type": "string" },
           "source_ref": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "근거가 되는 계정과목/비율 코드(예: OPM, GPM, REV)."
+            "description": "근거 코드/품목명(예: OPM, GPM, 후라이드치킨, 생닭)."
           },
           "impact": { "type": "string", "enum": ["positive", "negative", "neutral"] }
+        }
+      }
+    },
+    "bep_guidance": {
+      "type": "object",
+      "description": "BEP 기반 일일 판매 목표 직관 제시. bep.daily_target_qty 를 인용한 '하루 ○○개' 문장.",
+      "additionalProperties": false,
+      "required": ["text", "source_ref"],
+      "properties": {
+        "text": { "type": "string" },
+        "source_ref": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "tax_risk_alerts": {
+      "type": "array",
+      "description": "현금 매출 누락(unallocated) 기반 세무 리스크 경고. warn/critical 이면 POS 수량(Q) 기반 마진 분석 신뢰도 저하도 지적.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "source_ref", "severity"],
+        "properties": {
+          "text": { "type": "string" },
+          "source_ref": { "type": "array", "items": { "type": "string" } },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] }
+        }
+      }
+    },
+    "adherence_review": {
+      "type": "array",
+      "description": "직전 회차 권고 중 PL 관련 항목의 이행 성과(metric_progress 인용). baseline 이면 빈 배열.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rec_code", "text", "source_ref"],
+        "properties": {
+          "rec_code": { "type": "string" },
+          "text": { "type": "string" },
+          "source_ref": { "type": "array", "items": { "type": "string" } }
         }
       }
     },
@@ -46,7 +81,7 @@
     "out_of_scope": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "역할 경계 밖으로 판단하지 않은 주제 표기(예: 부채/현금흐름)."
+      "description": "역할 경계 밖 주제 표기(예: 부채/현금흐름/가수금)."
     }
   }
 }

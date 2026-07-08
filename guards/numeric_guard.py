@@ -1,16 +1,22 @@
 """numeric_guard — 숫자 환각 방지 훅 (CLAUDE.md §3.2, SPEC §4.1).
 
-Strict Rule의 최후 방어선. 에이전트 출력에 등장하는 모든 **재무 수치**가 입력 확정 JSON
-(`financials.*`)의 값 집합('Golden Set')에 **허용 오차 0**으로 존재하는지 대조한다.
-하나라도 불일치하면 환각으로 간주한다.
+Strict Rule의 최후 방어선. 에이전트 출력에 등장하는 모든 **재무 수치**가 확장된 Golden Set에
+**허용 오차 0**으로 존재하는지 대조한다. 하나라도 불일치하면 환각으로 간주한다.
+
+**확장 Golden Set(v0.3, CLAUDE §3.2):** 다음 소스를 모두 재귀 탐색해 수치를 모은다 —
+1. `financials.pl` / `financials.bs` (품목 마진·BEP·CCC·DSCR 등 파생 지표 포함),
+2. `client_profile` (예: `owner_age`=34 → Golden Set에 34 포함),
+3. `followup_context` (특히 `metric_progress`의 직전/당기 확정치, `previous_recommendations`의 rec_code).
+
+`golden_inputs`는 dict 하나 또는 여러 dict의 리스트를 받는다(리스트 권장 — `golden_sources()` 사용).
 
 핵심 원리
 ---------
-1. `input_json`을 재귀 탐색하여 모든 숫자(금액·비율 + 메타의 연도·분기 등)를 정규화해
-   Golden Set(`set[Decimal]`)을 만든다.
+1. `golden_inputs`(dict 또는 dict 리스트)를 재귀 탐색하여 모든 숫자를 정규화해 Golden Set을 만든다.
 2. `agent_output_json`을 재귀 탐색하여 모든 필드(분석 텍스트 포함)에서 숫자를 추출한다.
 3. 추출한 숫자 중 **재무적 수치**만 Golden Set과 대조한다. 비재무 수치(연도·분기·서수·
    코드에 포함된 숫자)는 예외 처리하여 오탐을 막는다.
+   주의: 나이 단위 '세'·'살'은 비재무 단위로 두지 **않는다** — 가짜 나이("99세")를 반드시 적발하기 위함.
 
 포맷팅 정규화
 -------------
@@ -152,14 +158,29 @@ def _iter_output_financial_numbers(obj: Any) -> list[Decimal]:
     return found
 
 
+def golden_sources(
+    financials: dict[str, Any],
+    client_profile: dict[str, Any] | None = None,
+    followup_context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """확장 Golden Set 구성용 소스 리스트를 만든다(None 제외).
+
+    에이전트 파이프라인에서 `numeric_guard(golden_sources(fin, profile, followup), output)`
+    형태로 사용한다.
+    """
+    return [src for src in (financials, client_profile, followup_context) if src is not None]
+
+
 def find_hallucinated_numbers(
-    input_json: dict[str, Any], agent_output_json: dict[str, Any]
+    golden_inputs: dict[str, Any] | list[dict[str, Any]],
+    agent_output_json: dict[str, Any],
 ) -> list[str]:
     """Golden Set에 없는 (= 환각으로 의심되는) 재무 수치 목록을 반환한다.
 
-    빈 리스트이면 환각 없음. 보고/디버깅용으로 원본 문자열 표현을 반환한다.
+    `golden_inputs`는 dict 하나 또는 dict 리스트. 빈 리스트이면 환각 없음.
+    보고/디버깅용으로 원본 값의 문자열 표현을 반환한다.
     """
-    golden = _build_golden_set(input_json)
+    golden = _build_golden_set(golden_inputs)
     violations: list[str] = []
     for value in _iter_output_financial_numbers(agent_output_json):
         if value not in golden:
@@ -167,9 +188,12 @@ def find_hallucinated_numbers(
     return violations
 
 
-def numeric_guard(input_json: dict[str, Any], agent_output_json: dict[str, Any]) -> bool:
-    """에이전트 출력의 모든 재무 수치가 입력 Golden Set에 존재하면 True.
+def numeric_guard(
+    golden_inputs: dict[str, Any] | list[dict[str, Any]],
+    agent_output_json: dict[str, Any],
+) -> bool:
+    """에이전트 출력의 모든 재무 수치가 확장 Golden Set에 존재하면 True.
 
-    하나라도 불일치(환각)하면 False. 허용 오차 0.
+    하나라도 불일치(환각)하면 False. 허용 오차 0. `golden_inputs`는 dict 또는 dict 리스트.
     """
-    return not find_hallucinated_numbers(input_json, agent_output_json)
+    return not find_hallucinated_numbers(golden_inputs, agent_output_json)
