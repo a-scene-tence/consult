@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/agent1_pl_analysis.json",
+  "title": "agent1_pl_analysis",
+  "description": "Agent 1(PL 분석가) 출력 계약. SPEC §2.6. 서술·해석만 담으며 새로운 수치를 생성하지 않는다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent", "summary", "findings", "milestone_review", "out_of_scope"],
+  "properties": {
+    "agent": { "type": "string", "const": "pl_analyst" },
+    "summary": { "type": "string", "description": "PL 관점 종합 한두 문장." },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic", "text", "source_ref", "impact"],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "예: profitability, cost_structure, op_margin"
+          },
+          "text": { "type": "string" },
+          "source_ref": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "근거가 되는 계정과목/비율 코드(예: OPM, GPM, REV)."
+          },
+          "impact": { "type": "string", "enum": ["positive", "negative", "neutral"] }
+        }
+      }
+    },
+    "milestone_review": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "text", "source_ref"],
+        "properties": {
+          "code": { "type": "string" },
+          "text": { "type": "string" },
+          "source_ref": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "역할 경계 밖으로 판단하지 않은 주제 표기(예: 부채/현금흐름)."
+    }
+  }
+}

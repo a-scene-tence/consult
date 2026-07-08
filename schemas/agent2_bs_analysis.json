@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/agent2_bs_analysis.json",
+  "title": "agent2_bs_analysis",
+  "description": "Agent 2(BS 분석가) 출력 계약. SPEC §2.6. 서술·해석만 담으며 새로운 수치를 생성하지 않는다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent", "summary", "findings", "out_of_scope"],
+  "properties": {
+    "agent": { "type": "string", "const": "bs_analyst" },
+    "summary": { "type": "string", "description": "BS 관점 종합 한두 문장." },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic", "text", "source_ref", "severity"],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "예: working_capital, leverage, liquidity, cash_flow"
+          },
+          "text": { "type": "string" },
+          "source_ref": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "근거가 되는 계정과목/비율 코드(예: CR, WC, DR)."
+          },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "역할 경계 밖으로 판단하지 않은 주제 표기(예: 수익성/원가구조)."
+    }
+  }
+}
