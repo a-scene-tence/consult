@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/expert_feedback.json",
+  "title": "expert_feedback",
+  "description": "전문가 피드백 계약 v0.3. SPEC §2.4, §3.2. HITL Step 5 — Agent 4 재작성의 최우선 입력(P3). overall_note(전역 지시)는 개별 instructions보다도 우선한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reviewer", "instructions"],
+  "properties": {
+    "reviewer": { "type": "string", "description": "피드백 작성 전문가 식별." },
+    "draft_id": { "type": "integer", "description": "대상 초안 id(선택 — 오케스트레이터가 검증)." },
+    "overall_note": {
+      "type": "string",
+      "description": "리포트 전체에 적용되는 전역 지시(최우선). Agent 4는 scope:global 로 반영 추적."
+    },
+    "instructions": {
+      "type": "array",
+      "description": "섹션 단위 지시. 빈 배열 허용(overall_note만 있는 경우).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_section", "directive"],
+        "properties": {
+          "target_section": { "type": "string", "description": "대상 섹션 id(초안 sections[].id)." },
+          "directive": { "type": "string", "description": "구체 수정 지시." },
+          "priority": { "type": "string", "enum": ["high", "medium", "low"], "default": "medium" }
+        }
+      }
+    }
+  }
+}

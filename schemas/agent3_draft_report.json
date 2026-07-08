@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/agent3_draft_report.json",
+  "title": "agent3_draft_report",
+  "description": "Agent 3(리포트 마스터) 출력 계약 v0.3. SPEC §2.3, §2.6. Agent 1·2 결과를 고객 언어로 통역·종합한 1차 초안 + 상호 모순 점검(contradiction_flags). 새 수치 생성·재계산 금지.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent", "sections", "contradiction_flags", "cited_values"],
+  "properties": {
+    "agent": { "type": "string", "const": "report_master" },
+    "sections": {
+      "type": "array",
+      "description": "초안 섹션(종합 요약·PL·BS 등). 첫 섹션 최상단에 BEP 일일 목표 + Cash Reserve 핵심 메시지 배치.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "body_md"],
+        "properties": {
+          "id": { "type": "string", "description": "예: overview, profitability, cash_health" },
+          "title": { "type": "string" },
+          "body_md": { "type": "string", "description": "고객 눈높이 마크다운 서술. 수치는 확정 JSON 인용만." }
+        }
+      }
+    },
+    "contradiction_flags": {
+      "type": "array",
+      "description": "Agent 1·2 간 상충 점검 결과(예: A1 마케팅 투자 권고 vs A2 현금 고갈 경고). 모순 없으면 빈 배열.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["between", "text", "resolved"],
+        "properties": {
+          "between": {
+            "type": "array",
+            "description": "상충 당사자 에이전트.",
+            "items": { "type": "string", "enum": ["pl_analyst", "bs_analyst"] }
+          },
+          "text": { "type": "string", "description": "무엇이 어떻게 상충하는지 서술." },
+          "resolved": { "type": "boolean", "description": "초안에서 우선순위/조건으로 조정 완료 여부." }
+        }
+      }
+    },
+    "cited_values": {
+      "type": "array",
+      "description": "초안이 인용한 확정 수치 근거 코드/품목(추적용). 예: bep.daily_target_qty, cash_flow.cash_runway_months.",
+      "items": { "type": "string" }
+    }
+  }
+}

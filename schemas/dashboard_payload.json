@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/dashboard_payload.json",
+  "title": "dashboard_payload",
+  "description": "고객용 대시보드 페이로드 v0.3. SPEC §2.7. 최상단 최우선 KPI = BEP 달성률(%) + 일일 타겟 판매수량. 수치는 확정 JSON에서 복사(재계산 금지).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["client", "hero_kpis", "kpis", "followup", "charts", "report_sections"],
+  "properties": {
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "period"],
+      "properties": {
+        "name": { "type": "string" },
+        "period": { "type": "string" }
+      }
+    },
+    "hero_kpis": {
+      "type": "array",
+      "description": "최우선 KPI 카드(BEP 달성률·일일 타겟 판매수량).",
+      "items": { "$ref": "#/$defs/kpi" }
+    },
+    "kpis": {
+      "type": "array",
+      "description": "보조 KPI 카드(OPM·Runway·DSCR·CCC 등).",
+      "items": { "$ref": "#/$defs/kpi" }
+    },
+    "followup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prev_period", "items"],
+      "properties": {
+        "prev_period": { "type": ["string", "null"], "description": "직전 회차(신규 고객이면 null)." },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rec_code", "label", "status"],
+            "properties": {
+              "rec_code": { "type": "string" },
+              "label": { "type": "string" },
+              "status": { "type": "string", "description": "이행 상태/방향(예: improved, worsened, flat)." },
+              "metric_ref": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "charts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "series_ref", "periods"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "description": "예: line, bar." },
+          "series_ref": { "type": "array", "items": { "type": "string" } },
+          "periods": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "report_sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "body_md"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "body_md": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "kpi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "anyOf": [
+        { "required": ["value_pct"] },
+        { "required": ["value"] }
+      ],
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "value_pct": { "type": "number", "description": "비율(%) 지표 값." },
+        "value": { "type": "number", "description": "비율이 아닌 수치 값(개월·일·배·수량 등)." },
+        "unit": { "type": "string" },
+        "trend": { "type": "string", "enum": ["up", "down", "flat"] },
+        "flag": { "type": "string", "enum": ["ok", "watch", "critical"] },
+        "target_ref": { "type": "string" }
+      }
+    }
+  }
+}

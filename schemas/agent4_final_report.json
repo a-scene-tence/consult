@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/agent4_final_report.json",
+  "title": "agent4_final_report",
+  "description": "Agent 4(최종 발행가) 복합 출력 계약 v0.3. SPEC §2.4, §2.7. 초안 + expert_feedback 최우선 반영 재작성(applied_feedback 추적) + dashboard_payload + 다음 회차 Follow-up 기준 recommendations[]. dashboard_payload·recommendations 는 각 standalone 스키마로 이중 검증한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent", "version", "sections", "applied_feedback", "dashboard_payload", "recommendations"],
+  "properties": {
+    "agent": { "type": "string", "const": "final_publisher" },
+    "version": { "type": "integer", "minimum": 1, "description": "개정 버전(초안 대비 +1)." },
+    "sections": {
+      "type": "array",
+      "description": "피드백을 반영해 재작성한 최종 섹션.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "body_md"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "body_md": { "type": "string" }
+        }
+      }
+    },
+    "applied_feedback": {
+      "type": "array",
+      "description": "전문가 피드백 반영 내역 추적. overall_note 반영은 scope:global. 반영 없으면 빈 배열.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "directive_ref", "how_applied"],
+        "properties": {
+          "from": { "type": "string", "description": "피드백 작성자(reviewer)." },
+          "directive_ref": { "type": "string", "description": "반영한 지시(overall_note 또는 target_section id)." },
+          "how_applied": { "type": "string", "description": "어떻게 반영했는지." },
+          "scope": { "type": "string", "enum": ["global", "section"], "default": "section" }
+        }
+      }
+    },
+    "dashboard_payload": { "$ref": "#/$defs/dashboard_payload" },
+    "recommendations": { "$ref": "#/$defs/recommendations" }
+  },
+  "$defs": {
+    "kpi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "anyOf": [
+        { "required": ["value_pct"] },
+        { "required": ["value"] }
+      ],
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "value_pct": { "type": "number" },
+        "value": { "type": "number" },
+        "unit": { "type": "string" },
+        "trend": { "type": "string", "enum": ["up", "down", "flat"] },
+        "flag": { "type": "string", "enum": ["ok", "watch", "critical"] },
+        "target_ref": { "type": "string" }
+      }
+    },
+    "dashboard_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "hero_kpis", "kpis", "followup", "charts", "report_sections"],
+      "properties": {
+        "client": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "period"],
+          "properties": {
+            "name": { "type": "string" },
+            "period": { "type": "string" }
+          }
+        },
+        "hero_kpis": { "type": "array", "items": { "$ref": "#/$defs/kpi" } },
+        "kpis": { "type": "array", "items": { "$ref": "#/$defs/kpi" } },
+        "followup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prev_period", "items"],
+          "properties": {
+            "prev_period": { "type": ["string", "null"] },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rec_code", "label", "status"],
+                "properties": {
+                  "rec_code": { "type": "string" },
+                  "label": { "type": "string" },
+                  "status": { "type": "string" },
+                  "metric_ref": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "charts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "series_ref", "periods"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "type": "string" },
+              "series_ref": { "type": "array", "items": { "type": "string" } },
+              "periods": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "report_sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "body_md"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "body_md": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rec_code", "text", "target_metric", "direction"],
+        "properties": {
+          "rec_code": { "type": "string" },
+          "text": { "type": "string" },
+          "target_metric": { "type": "string" },
+          "direction": { "type": "string", "enum": ["increase", "decrease", "maintain"] },
+          "status": { "type": "string", "enum": ["proposed", "in_progress", "achieved", "not_achieved", "dropped"] }
+        }
+      }
+    }
+  }
+}
