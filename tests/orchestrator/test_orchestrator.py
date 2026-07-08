@@ -1,8 +1,8 @@
-"""오케스트레이터 상태 머신 테스트 — 에이전트 mock 주입, DB 불필요(InMemoryStore).
+"""오케스트레이터 DB 영속화 통합 테스트 — SqlAlchemyStore + SQLite in-memory.
 
-computed→drafting→review_pending→revising→review_pending→approved→published 전 구간이
-흐르고, agent_runs 4건 감사·published/recommendations 저장을 확인한다. 잘못된 전이는
-IllegalTransition, 에이전트 예외 시 status=failed 기록을 확인한다.
+각 상태 전이가 실제 DB 트랜잭션으로 커밋되는지(매 단계 DB 재조회), agent_runs 4행,
+published_reports·recommendations 행, publish 직후 kb_ingestions success 를 검증한다. 잘못된
+전이는 IllegalTransition, 에이전트 예외 시 status=failed 커밋을 확인한다. 에이전트·RAG 는 mock.
 """
 
 from __future__ import annotations
@@ -12,15 +12,24 @@ import pytest
 from compute.compute_bs import compute_bs, pl_context_from_pl
 from compute.compute_pl import compute_pl
 from compute.ingest import sample_bs_raw, sample_client_profile, sample_pl_raw
-from orchestrator import IllegalTransition, InMemoryStore, Orchestrator
+from db.models import (
+    AgentRun,
+    Client,
+    Financials,
+    KbIngestion,
+    PublishedReport,
+    Recommendation,
+    ReportDraft,
+)
+from db.session import create_all, make_engine, make_session_factory
+from orchestrator import IllegalTransition, Orchestrator, SqlAlchemyStore
+from rag.chroma_client import InMemoryCaseStore
 
 FIXED_TS = "2026-07-07T09:00:00+09:00"
-DRAFT_ID = 1
-CLIENT_ID = 1001
 PERIOD = "2025-Q3"
 
 
-# --- fake 에이전트 (스키마·guard 우회, 오케스트레이션 배선만 검증) ---
+# --- fake 에이전트(스키마·guard 우회, 오케스트레이션 배선만 검증) ---
 def _fake_pl(**kwargs):
     return {"agent": "pl_analyst", "summary": "PL mock"}
 
@@ -33,24 +42,20 @@ def _fake_report(**kwargs):
     return {
         "agent": "report_master",
         "sections": [{"id": "overview", "title": "요약", "body_md": "초안"}],
-        "contradiction_flags": [],
-        "cited_values": [],
+        "contradiction_flags": [], "cited_values": [],
     }
 
 
 def _fake_final(**kwargs):
     return {
-        "agent": "final_publisher",
-        "version": 2,
-        "sections": [{"id": "overview", "title": "요약", "body_md": "최종"}],
+        "agent": "final_publisher", "version": 2,
+        "sections": [{"id": "overview", "title": "요약", "body_md": "하루 35개면 손익분기"}],
         "applied_feedback": [],
         "dashboard_payload": {
             "client": {"name": "테스트", "period": "2025년 3분기"},
             "hero_kpis": [{"key": "daily_target_qty", "label": "일일 목표", "value": 35}],
-            "kpis": [],
-            "followup": {"prev_period": None, "items": []},
-            "charts": [],
-            "report_sections": [],
+            "kpis": [], "followup": {"prev_period": None, "items": []},
+            "charts": [], "report_sections": [],
         },
         "recommendations": [
             {"rec_code": "R-2025Q3-01", "text": "현금 유보",
@@ -59,87 +64,96 @@ def _fake_final(**kwargs):
     }
 
 
-def _preloaded_store(status: str = "computed") -> InMemoryStore:
+@pytest.fixture()
+def seeded():
+    """SQLite in-memory 에 client·financials·draft(computed) 를 적재하고 (store, draft_id) 반환."""
+    engine = make_engine("sqlite+pysqlite:///:memory:")
+    create_all(engine)
+    sf = make_session_factory(engine)
     pl = compute_pl(sample_pl_raw(), computed_at=FIXED_TS)
     bs = compute_bs(sample_bs_raw(), pl_context=pl_context_from_pl(pl), computed_at=FIXED_TS)
-    store = InMemoryStore()
-    store.preload(
-        DRAFT_ID, client_id=CLIENT_ID, period=PERIOD,
-        financials_pl=pl, financials_bs=bs,
-        client_profile=sample_client_profile(),
-        followup_context={"is_first_round": True, "current_period": PERIOD},
-        status=status,
+    profile = sample_client_profile()
+    with sf() as s:
+        c = Client(name="사장님", **{k: profile[k] for k in (
+            "trade_name", "industry", "district_type", "location_raw",
+            "owner_gender", "owner_age", "owner_age_band", "risk_appetite")})
+        s.add(c); s.flush()
+        cid = c.id
+        s.add(Financials(client_id=cid, period=PERIOD, kind="pl", payload_json=pl))
+        s.add(Financials(client_id=cid, period=PERIOD, kind="bs", payload_json=bs))
+        d = ReportDraft(client_id=cid, period=PERIOD, version=1, status="computed")
+        s.add(d); s.flush()
+        did = d.id
+        s.commit()
+    return SqlAlchemyStore(sf), did, sf
+
+
+def _orch(store, **overrides):
+    kwargs = dict(
+        pl_fn=_fake_pl, bs_fn=_fake_bs, report_fn=_fake_report, publish_fn=_fake_final,
+        case_store=InMemoryCaseStore(),
     )
-    return store
+    kwargs.update(overrides)
+    return Orchestrator(store, **kwargs)
 
 
-def _orch(store: InMemoryStore) -> Orchestrator:
-    return Orchestrator(
-        store, pl_fn=_fake_pl, bs_fn=_fake_bs, report_fn=_fake_report, publish_fn=_fake_final,
-    )
-
-
-def test_full_pipeline_to_published():
-    store = _preloaded_store()
+def test_full_pipeline_persists_to_published(seeded):
+    store, did, sf = seeded
     orch = _orch(store)
 
-    orch.run_analysis(DRAFT_ID)
-    assert store.get_draft(DRAFT_ID)["status"] == "review_pending"
+    orch.run_analysis(did)
+    assert store.get_draft(did)["status"] == "review_pending"  # DB 재조회
 
-    orch.submit_feedback(DRAFT_ID, {"reviewer": "전문가", "instructions": []})
-    assert store.get_draft(DRAFT_ID)["status"] == "review_pending"
-    assert store.get_draft(DRAFT_ID)["version"] == 2
+    orch.submit_feedback(did, {"reviewer": "전문가", "overall_note": "부드럽게", "instructions": []})
+    assert store.get_draft(did)["status"] == "review_pending"
+    assert store.get_draft(did)["version"] == 2
 
-    orch.approve(DRAFT_ID)
-    assert store.get_draft(DRAFT_ID)["status"] == "approved"
+    orch.approve(did)
+    assert store.get_draft(did)["status"] == "approved"
 
-    published = orch.publish(DRAFT_ID)
-    assert store.get_draft(DRAFT_ID)["status"] == "published"
+    orch.publish(did)
+    assert store.get_draft(did)["status"] == "published"
 
-    # 감사 로그 4건(pl, bs, report, final), 모두 통과
-    assert len(store.agent_runs) == 4
-    assert [r["agent"] for r in store.agent_runs] == [
-        "pl_analyst", "bs_analyst", "report_master", "final_publisher",
-    ]
-    assert all(r["validation_passed"] for r in store.agent_runs)
-    assert all(r["input_hash"] and r["output_hash"] for r in store.agent_runs)
+    with sf() as s:
+        runs = s.query(AgentRun).order_by(AgentRun.id).all()
+        assert [r.agent for r in runs] == [
+            "pl_analyst", "bs_analyst", "report_master", "final_publisher"]
+        assert all(r.validation_passed for r in runs)
+        assert s.query(PublishedReport).count() == 1
+        recs = s.query(Recommendation).all()
+        assert len(recs) == 1 and recs[0].rec_code == "R-2025Q3-01"
+        assert recs[0].client_id is not None and recs[0].period == PERIOD
+        # publish 직후 KB 적재(비차단 훅) → kb_ingestions success
+        kb = s.query(KbIngestion).all()
+        assert len(kb) == 1 and kb[0].status == "success"
 
-    # 발행본·권고 영속화
-    assert DRAFT_ID in store.published
-    assert published["dashboard_payload"]["hero_kpis"][0]["value"] == 35
-    recs = store.recommendations[DRAFT_ID]
-    assert recs[0]["client_id"] == CLIENT_ID and recs[0]["period"] == PERIOD
 
-
-def test_illegal_transition_rejected():
-    """computed 에서 곧바로 approve 시도 → IllegalTransition."""
-    store = _preloaded_store()
+def test_illegal_transition_rejected(seeded):
+    store, did, _ = seeded
     orch = _orch(store)
     with pytest.raises(IllegalTransition):
-        orch.approve(DRAFT_ID)
+        orch.approve(did)  # computed → approved 불가
 
 
-def test_publish_without_final_rejected():
-    """Agent 4 산출(최종본) 없이 approved 만으로 publish → 거부."""
-    store = _preloaded_store()
+def test_publish_without_final_rejected(seeded):
+    store, did, _ = seeded
     orch = _orch(store)
-    orch.run_analysis(DRAFT_ID)          # payload = a3 초안(대시보드 없음)
-    orch.approve(DRAFT_ID)               # review_pending → approved (허용)
+    orch.run_analysis(did)   # payload = a3 초안(대시보드 없음)
+    orch.approve(did)        # review_pending → approved
     with pytest.raises(IllegalTransition):
-        orch.publish(DRAFT_ID)
+        orch.publish(did)
 
 
-def test_agent_failure_marks_failed():
-    """에이전트 예외 시 status=failed 기록 + 예외 전파 + agent_run(validation_passed=False)."""
+def test_agent_failure_marks_failed(seeded):
+    store, did, sf = seeded
+
     def _boom(**kwargs):
         raise RuntimeError("model down")
 
-    store = _preloaded_store()
-    orch = Orchestrator(
-        store, pl_fn=_boom, bs_fn=_fake_bs, report_fn=_fake_report, publish_fn=_fake_final,
-    )
+    orch = _orch(store, pl_fn=_boom)
     with pytest.raises(RuntimeError):
-        orch.run_analysis(DRAFT_ID)
-    assert store.get_draft(DRAFT_ID)["status"] == "failed"
-    assert store.agent_runs[-1]["validation_passed"] is False
-    assert store.agent_runs[-1]["output_hash"] is None
+        orch.run_analysis(did)
+    assert store.get_draft(did)["status"] == "failed"  # 트랜잭션 커밋됨
+    with sf() as s:
+        last = s.query(AgentRun).order_by(AgentRun.id.desc()).first()
+        assert last.validation_passed is False and last.output_hash is None

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/past_case.json",
+  "title": "past_case",
+  "description": "past_consulting_cases 적재 레코드 v0.3(마스킹 v2). SPEC §2.6, CLAUDE.md §3.5. 상호명·정확위치·정확나이·client_id·정확금액은 구조적으로 금지(additionalProperties:false + 미정의). 코호트 메타로 필터링 검색한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "case_id", "cohort_meta", "period_generalized", "financial_profile",
+    "situation_summary", "expert_lessons", "outcome_label", "masking_version"
+  ],
+  "properties": {
+    "case_id": { "type": "string", "description": "예: K-000108" },
+    "cohort_meta": {
+      "type": "object",
+      "description": "필터링 가능한 코호트 메타데이터. 개인 특정 불가한 밴드/범주만.",
+      "additionalProperties": false,
+      "required": ["industry", "district_type", "owner_gender", "owner_age_band", "risk_appetite"],
+      "properties": {
+        "industry": { "type": "string" },
+        "district_type": {
+          "type": "string",
+          "enum": ["office", "residential", "floating", "university", "tourist", "industrial", "etc"]
+        },
+        "owner_gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "owner_age_band": { "type": "string", "description": "예: 30대 초중반 (정확 나이 금지)" },
+        "risk_appetite": { "type": "string", "enum": ["conservative", "moderate", "aggressive"] }
+      }
+    },
+    "period_generalized": { "type": "string", "description": "일반화된 기간(예: 2025-하반기) — 정확 회차 금지." },
+    "financial_profile": {
+      "type": "object",
+      "description": "비율 밴드만(정확 수치 금지). 코호트 벤치마크용.",
+      "additionalProperties": false,
+      "required": ["OPM_band", "DR_band", "runway_band"],
+      "properties": {
+        "OPM_band": { "type": "string", "description": "예: 10-15%" },
+        "DR_band": { "type": "string", "description": "예: 120-140%" },
+        "runway_band": { "type": "string", "description": "예: 2-3개월" }
+      }
+    },
+    "situation_summary": { "type": "string", "description": "마스킹된 상황 요약(상호명 없음, 위치는 상권 밴드만)." },
+    "expert_lessons": {
+      "type": "array",
+      "description": "전문가 교훈(applied_feedback·권고에서 추출·마스킹).",
+      "items": { "type": "string" }
+    },
+    "outcome_label": { "type": "string", "enum": ["success", "partial", "unknown", "failure"] },
+    "masking_version": { "type": "string", "const": "v2" },
+    "embedded_at": { "type": "string", "description": "적재 시각(ISO8601)." }
+  }
+}

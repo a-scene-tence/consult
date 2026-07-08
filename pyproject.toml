@@ -21,6 +21,10 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+# 지속 학습 RAG 백엔드 — 지연 임포트(코어 설치엔 불필요, ChromaCaseStore 사용 시에만).
+rag = [
+    "chromadb>=0.5",
+]
 
 # 연산/에이전트/DB 접근 계층만 패키지로 설치한다.
 # schemas/ 는 데이터(JSON), web/ 는 정적 자산이므로 패키지에서 제외.

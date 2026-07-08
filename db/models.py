@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -25,6 +26,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+# 이식성: Postgres 는 JSONB(운영), 그 외(SQLite 테스트)는 범용 JSON 으로 컴파일된다.
+# DDL/운영 동작은 Postgres 에서 JSONB 그대로 유지된다(마이그레이션 SQL 무변경).
+_JSON = JSON().with_variant(JSONB, "postgresql")
+# BigInteger PK 는 SQLite 에서 자동증가가 안 되므로 테스트 방언에선 Integer 로 컴파일한다.
+_BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
 
 # SPEC §3.1 상태 머신에서 허용되는 report_drafts.status 값.
 REPORT_STATUSES: tuple[str, ...] = (
@@ -140,7 +147,7 @@ class Financials(Base):
     )
     period: Mapped[str] = mapped_column(String(32), nullable=False)
     kind: Mapped[str] = mapped_column(String(8), nullable=False)  # 'pl' | 'bs'
-    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload_json: Mapped[dict] = mapped_column(_JSON, nullable=False)
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -163,7 +170,7 @@ class ReportDraft(Base):
     period: Mapped[str] = mapped_column(String(32), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="computed")
-    payload_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    payload_json: Mapped[dict | None] = mapped_column(_JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -182,7 +189,7 @@ class ExpertFeedback(Base):
         ForeignKey("report_drafts.id", ondelete="CASCADE"), nullable=False
     )
     reviewer: Mapped[str] = mapped_column(String(128), nullable=False)
-    instructions_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    instructions_json: Mapped[dict] = mapped_column(_JSON, nullable=False)
     overall_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -200,7 +207,7 @@ class PublishedReport(Base):
     draft_id: Mapped[int] = mapped_column(
         ForeignKey("report_drafts.id", ondelete="RESTRICT"), nullable=False
     )
-    dashboard_payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    dashboard_payload_json: Mapped[dict] = mapped_column(_JSON, nullable=False)
     published_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -211,7 +218,7 @@ class AgentRun(Base):
 
     __tablename__ = "agent_runs"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(_BIGINT_PK, primary_key=True)
     draft_id: Mapped[int | None] = mapped_column(
         ForeignKey("report_drafts.id", ondelete="SET NULL"), nullable=True
     )

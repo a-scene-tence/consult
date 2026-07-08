@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/rag_context.json",
+  "title": "rag_context",
+  "description": "코호트 조회 결과 → Agent 1·2 주입 계약 v0.3. SPEC §2.6, CLAUDE.md §2.4. 정성 참고 전용 — 과거 수치를 현재 고객 확정치로 인용 금지. cases 는 마스킹된 케이스만.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["query", "cases", "retrieved_at"],
+  "properties": {
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["industry", "cohort", "ratio_band", "relaxation_level", "relaxed_fields"],
+      "properties": {
+        "industry": { "type": "string" },
+        "cohort": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["district_type", "owner_gender", "owner_age_band", "risk_appetite"],
+          "properties": {
+            "district_type": { "type": "string" },
+            "owner_gender": { "type": "string" },
+            "owner_age_band": { "type": "string" },
+            "risk_appetite": { "type": "string" }
+          }
+        },
+        "ratio_band": {
+          "type": "object",
+          "description": "현재 고객 재무 비율 밴드(유사도 검색 기준). 정확 수치 아님.",
+          "additionalProperties": false,
+          "properties": {
+            "OPM": { "type": "string" },
+            "DR": { "type": "string" },
+            "runway": { "type": "string" }
+          }
+        },
+        "relaxation_level": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "코호트 필터 완화 단계(0=완전일치). 참고 강도 조절용."
+        },
+        "relaxed_fields": {
+          "type": "array",
+          "description": "완화로 해제된 코호트 키(예: risk_appetite, owner_gender).",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "description": "코호트 필터 + 유사도로 선별된 과거 케이스(마스킹됨). 임계값 미달·무결과면 빈 배열.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "similarity", "cohort", "situation_summary", "expert_lessons", "outcome"],
+        "properties": {
+          "case_id": { "type": "string" },
+          "similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "cohort": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["industry", "district_type", "owner_age_band", "risk_appetite"],
+            "properties": {
+              "industry": { "type": "string" },
+              "district_type": { "type": "string" },
+              "owner_gender": { "type": "string" },
+              "owner_age_band": { "type": "string" },
+              "risk_appetite": { "type": "string" }
+            }
+          },
+          "situation_summary": { "type": "string" },
+          "expert_lessons": { "type": "array", "items": { "type": "string" } },
+          "outcome": { "type": "string" }
+        }
+      }
+    },
+    "retrieved_at": { "type": "string", "description": "조회 시각(ISO8601)." }
+  }
+}
