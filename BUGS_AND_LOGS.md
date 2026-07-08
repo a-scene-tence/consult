@@ -1,8 +1,11 @@
 # BUGS_AND_LOGS.md — 이슈 및 오류 트래커
 
-> **문서 상태:** 초안 v0.1 (승인 대기)
+> **문서 상태:** 개정 v0.3 (승인 대기)
 > **목적:** 멀티 에이전트 협업 과정에서 발생하는 환각·컨텍스트 누락·로직 오류·역할 위반 등을
 > 기록하고, 동일 문제의 재발을 방지한다. 새 이슈는 상단(최신순)에 추가한다.
+> **v0.3 개정 요지:** 미시 연산/데이터 카테고리(`reconciliation_error`, `division_by_zero`),
+> 시계열/RAG 카테고리(`followup_missing_baseline`, `category_mismatch`) 추가,
+> `pii_leak` 위험군에 상호명·정확 위치·정확 성별/나이 명시.
 
 ---
 
@@ -14,8 +17,8 @@
 ### [BUG-####] <한 줄 제목>
 - 일시: YYYY-MM-DD HH:MM (KST)
 - 심각도: Critical | High | Medium | Low
-- 카테고리: hallucination | context_loss | role_violation | contradiction | feedback_ignored | schema_violation | compute_error | infra | rag_contamination | similarity_mismatch | pii_leak
-- 관련 에이전트/모듈: Agent 1(PL) | Agent 2(BS) | Agent 3(리포트마스터) | Agent 4(발행가) | compute | orchestrator | web | db | rag | masking | case_indexer
+- 카테고리: hallucination | context_loss | role_violation | contradiction | feedback_ignored | schema_violation | compute_error | infra | rag_contamination | similarity_mismatch | pii_leak | reconciliation_error | division_by_zero | followup_missing_baseline | category_mismatch
+- 관련 에이전트/모듈: Agent 1(PL) | Agent 2(BS) | Agent 3(리포트마스터) | Agent 4(발행가) | compute | orchestrator | web | db | rag | masking | case_indexer | ingest(Master 게이트) | followup
 - 관련 리포트: <client_id> / <period> / <version> / <draft_id>
 - 상태: Open | Investigating | Fixed | Won't Fix | Regression-Guarded
 
@@ -60,7 +63,11 @@
 | `infra` | API/DB/네트워크 오류 | 타임아웃, 429, 커넥션 | SDK 재시도, 상태 `failed` 후 재시도 |
 | `rag_contamination` | 과거 데이터 오염 — 노후·부정확·저품질 케이스가 신규 분석을 왜곡 | 오래된 벤치마크·틀린 교훈이 rag_context로 유입 | 적재 시 `outcome_label`·`embedded_at` 신선도 메타, 최소 유사도 임계값, 주기적 정리(CLAUDE.md §3.5) |
 | `similarity_mismatch` | 유사도 매칭 실패 — 무관 케이스가 매칭되어 잘못된 벤치마크 제공 | 다른 업종/재무구조 케이스가 top_k에 포함 | 업종 필터 + 비율 밴드 사전필터, 임계값 미달 시 `rag_context` 미주입(CLAUDE.md §2.4) |
-| `pii_leak` | 마스킹 실패로 PII·정확 금액이 과거 케이스/rag_context에 잔존 | 고객명·사업자번호·정확 매출액 노출 | 이중 마스킹, 주입 전 PII·금액 스캔, 잔존 시 케이스 드롭·적재 중단(CLAUDE.md §3.5) |
+| `pii_leak` | 마스킹 실패로 PII·정확 금액이 과거 케이스/rag_context에 잔존. **위험군: 상호명(trade_name), 정확한 위치(location_raw), 정확한 성별/나이(owner_age), 고객명·사업자번호·정확 금액** | 상호명·'34세'·'역삼동' 등이 케이스 요약에 노출 | 마스킹 v2(상호명 완전 삭제, 위치→상권 밴드, 나이→연령대 밴드), 주입 전 스캔, 잔존 시 케이스 드롭·적재 중단(CLAUDE.md §3.5) |
+| `reconciliation_error` | **매출 대사 불일치** — POS 품목 매출 총합과 신고/통장 매출이 맞지 않는데 unallocated 분류 없이 진행 | 품목 합계 ≠ 총매출인데 확정 JSON 생성됨 | ingest 단계 대사 체크 → 차액은 `unallocated_cash_sales`로 강제 분류, 임계 초과 시 업로드 반려(DESIGN A-1) |
+| `division_by_zero` | 미시 연산의 0-나눗셈 — 판매수량 0, 전기 0, CL/EQUITY/월 원리금 0 등 | BEP·마진율·DSCR 계산 crash 또는 inf | compute 0-나눗셈 방어(명시 에러 또는 N/A), 경계 골든 테스트(CLAUDE.md §3.0) |
+| `followup_missing_baseline` | **직전 데이터가 없는 신규 고객**에 대한 Follow-up 분석 예외 처리 누락 | 신규 고객인데 이행 점검 서술이 생성되거나 파이프라인 에러 | `is_first_round=true` baseline 모드 분기(SPEC §1.5), 오케스트레이터 필수 체크 |
+| `category_mismatch` | **이종 상권/타겟 벤치마크 오염** — 코호트가 다른 케이스(다른 상권·성별·연령대·성향)가 RAG 벤치마크로 주입 | 오피스 상권 치킨집에 관광지 카페 교훈이 인용됨 | 코호트 메타 필터 강제 + 완화 수준 기록(CLAUDE.md §2.4), 주입 케이스 cohort_meta 검사 |
 
 ---
 
@@ -78,10 +85,21 @@
 - [ ] **감사 로그:** `agent_runs`에 입력/출력 해시·모델·검증 결과가 기록됐는가?
 - [ ] **비밀 관리:** 프롬프트·로그·커밋에 키/PII가 노출되지 않았는가?
 
+**미시 연산·데이터 게이트 (ingest/compute 시)**
+- [ ] **매출 대사:** POS 품목 합계 vs 총매출 차액이 `unallocated_cash_sales`로 분류됐는가(`reconciliation_error` 방지)?
+- [ ] **0-나눗셈 방어:** 판매수량 0·전기 0·월 원리금 0 케이스가 명시적 에러/N/A로 처리됐는가?
+- [ ] **의무 지표 완결:** §CLAUDE 3.0 목록(품목 마진·BEP·CCC·DSCR·Runway·Top3·metric_progress)이 전부 확정 JSON에 존재하는가?
+
+**시계열(Follow-up) 가드**
+- [ ] **baseline 분기:** 직전 회차가 없는 신규 고객이 `is_first_round=true` 모드로 처리됐는가(`followup_missing_baseline` 방지)?
+- [ ] **이행 지표 원천:** `metric_progress`가 compute 산출 확정치인가(에이전트 계산 아님)?
+- [ ] **권고 저장:** 발행 시 `recommendations`가 구조화 저장되어 다음 회차 기준이 되는가?
+
 **지속 학습(RAG) 가드 (적재/조회 시)**
-- [ ] **마스킹:** 적재 전·주입 전 이중 마스킹이 적용됐고, `rag_context`에 PII·정확 금액이 없는가?
+- [ ] **마스킹 v2:** 적재 전·주입 전 이중 마스킹 — **상호명 완전 삭제, 위치→상권 밴드, 나이→연령대 밴드**, PII·정확 금액 부재?
+- [ ] **코호트 필터:** 조회가 업종+상권+성별/연령대+성향 메타 필터를 거쳤고, 완화 수준이 기록됐는가(`category_mismatch` 방지)?
 - [ ] **유사도 임계값:** 최소 유사도 미달 시 `rag_context`를 주입하지 않았는가(빈 컨텍스트)?
-- [ ] **과거 케이스 정합:** 저장된 케이스에 `client_id`/고객명/정확 금액/PII가 없는가(비율 밴드만)?
+- [ ] **과거 케이스 정합:** 저장된 케이스에 `client_id`/고객명/상호명/정확 위치/정확 나이/정확 금액이 없는가(코호트 메타+밴드만)?
 - [ ] **오용 금지:** 에이전트가 RAG 유래 밴드/과거 수치를 현재 고객 확정치로 인용하지 않았는가(`numeric_guard` 통과)?
 - [ ] **적재 멱등성:** 동일 `draft_id` 중복 적재 없이 `kb_ingestions`에 결과가 기록됐는가?
 
@@ -160,6 +178,10 @@
 - [ ] 큰 `max_tokens` 재작성 시 타임아웃 → 스트리밍 사용 검토.
 - [ ] 통화/기간 포맷 로케일 이슈(KRW, 분기 표기) → 표시 계층 단위 테스트.
 - [ ] **과거 데이터 오염(`rag_contamination`):** 노후·저품질 케이스가 신규 분석 왜곡 → 신선도 메타·outcome 라벨·주기적 정리, 임계값 관리.
-- [ ] **유사도 매칭 실패(`similarity_mismatch`):** 무관 케이스 매칭 → 잘못된 벤치마크 → 업종+비율 밴드 사전필터, 임계값 미달 시 미주입.
+- [ ] **유사도 매칭 실패(`similarity_mismatch`):** 무관 케이스 매칭 → 잘못된 벤치마크 → 코호트 필터+비율 밴드 사전필터, 임계값 미달 시 미주입.
+- [ ] **코호트 벤치마크 오염(`category_mismatch`):** 코호트 데이터가 적은 초기에는 필터 완화가 잦아 이종 상권/타겟 케이스 혼입 위험 ↑ → 완화 수준 기록·참고 강도 하향, 케이스 축적 후 필터 강화.
 - [ ] **임베딩 노후/드리프트:** 임베딩 모델 교체·업종 분포 변화로 유사도 품질 저하 → 재임베딩 주기·회귀 모니터링.
-- [ ] **마스킹 회귀(`pii_leak`):** 마스킹 규칙 변경으로 PII·정확 금액 유출 → 마스킹 골든 테스트·주입 전 스캔 상시 유지.
+- [ ] **마스킹 회귀(`pii_leak`):** 마스킹 규칙 변경으로 상호명·정확 위치/나이·정확 금액 유출 → 마스킹 골든 테스트·주입 전 스캔 상시 유지.
+- [ ] **Master 양식 버전 드리프트:** 표준화 양식 개정 시 구버전 업로드 혼입 → 양식 버전 필드·ingest 검증.
+- [ ] **세무 캘린더 유지보수:** 세법 개정으로 신고 일정 변경 시 정적 설정 갱신 누락 → 연 1회 이상 점검 항목화.
+- [ ] **프로필 노후화:** 상권 변화·업종 전환 등 프로필 변경 미반영 → 회차 시작 시 프로필 확인 단계.
