@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% block title %}내 가게 대시보드{% endblock %}
 {% block body %}
+<!-- 로그인 (사장님/client) — 토큰이 없으면 표시 -->
+<section id="login-box" class="bg-white rounded-xl border border-slate-200 p-4 mb-4 hidden">
+  <h2 class="font-semibold mb-2 text-sm">로그인</h2>
+  <div class="flex items-center gap-2 text-sm">
+    <input id="l-user" class="border rounded px-2 py-1" placeholder="아이디" value="owner" />
+    <input id="l-pass" type="password" class="border rounded px-2 py-1" placeholder="비밀번호" value="owner-secret" />
+    <button id="btn-login" class="bg-slate-800 text-white rounded px-3 py-1.5">로그인</button>
+  </div>
+</section>
+
 <div id="dash-empty" class="hidden text-slate-500 text-center py-16">아직 발행된 리포트가 없습니다.</div>
 
 <div id="dash">
@@ -42,23 +52,37 @@ function kpiCard(k) {
   </div>`;
 }
 
+async function loadDashboard() {
+  const d = await apiGet(`/api/dashboard/${CLIENT_ID}`);
+  el("d-name").textContent = d.client?.name || "내 가게";
+  el("d-period").textContent = d.client?.period || "";
+  el("hero").innerHTML = (d.hero_kpis || []).map(heroCard).join("");
+  el("kpis").innerHTML = (d.kpis || []).map(kpiCard).join("");
+  const items = (d.followup && d.followup.items) || [];
+  if (items.length) {
+    el("followup-wrap").classList.remove("hidden");
+    el("followup").innerHTML = items.map(it =>
+      `<li>• ${it.label} — <span class="font-medium">${it.status}</span></li>`).join("");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+  if (!getToken()) el("login-box").classList.remove("hidden");
+  const btn = el("btn-login");
+  if (btn) btn.onclick = async () => {
+    try { await login(el("l-user").value, el("l-pass").value); el("login-box").classList.add("hidden"); loadDashboard(); }
+    catch (e) { alert("로그인 오류: " + e.message); }
+  };
   try {
-    const d = await apiGet(`/api/dashboard/${CLIENT_ID}`);
-    el("d-name").textContent = d.client?.name || "내 가게";
-    el("d-period").textContent = d.client?.period || "";
-    el("hero").innerHTML = (d.hero_kpis || []).map(heroCard).join("");
-    el("kpis").innerHTML = (d.kpis || []).map(kpiCard).join("");
-    const items = (d.followup && d.followup.items) || [];
-    if (items.length) {
-      el("followup-wrap").classList.remove("hidden");
-      el("followup").innerHTML = items.map(it =>
-        `<li>• ${it.label} — <span class="font-medium">${it.status}</span></li>`).join("");
-    }
+    await loadDashboard();
   } catch (e) {
-    el("dash").classList.add("hidden");
-    el("dash-empty").classList.remove("hidden");
-    el("dash-empty").textContent = "리포트를 불러오지 못했습니다: " + e.message;
+    if (String(e.message).includes("401") || String(e.message).includes("자격")) {
+      el("login-box").classList.remove("hidden");
+    } else {
+      el("dash").classList.add("hidden");
+      el("dash-empty").classList.remove("hidden");
+      el("dash-empty").textContent = "리포트를 불러오지 못했습니다: " + e.message;
+    }
   }
 });
 </script>

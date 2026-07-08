@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
 
 from web.api import get_session_factory
+from web.auth import require_admin
 from web.services import create_client
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
@@ -27,6 +28,8 @@ class ClientIn(BaseModel):
 
 
 @router.post("", status_code=201)
-def register_client(body: ClientIn, request: Request) -> dict[str, Any]:
+def register_client(
+    body: ClientIn, request: Request, _admin: dict = Depends(require_admin)
+) -> dict[str, Any]:
     client_id = create_client(get_session_factory(request), body.model_dump(exclude_none=True))
     return {"client_id": client_id}

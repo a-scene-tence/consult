@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from web.api import (
@@ -14,9 +14,13 @@ from web.api import (
     get_store,
     require_draft,
 )
+from web.auth import require_admin
 from web.services import get_draft_view, ingest_financials, record_feedback
 
-router = APIRouter(prefix="/api/consulting", tags=["consulting"])
+# 컨설팅 파이프라인은 전부 관리자(전문가) 전용.
+router = APIRouter(
+    prefix="/api/consulting", tags=["consulting"], dependencies=[Depends(require_admin)]
+)
 
 
 class IngestIn(BaseModel):
@@ -62,7 +66,14 @@ def start(draft_id: int, request: Request, background: BackgroundTasks) -> dict[
     store = get_store(request)
     draft = require_draft(store, draft_id)
     ensure_transition(draft["status"], "drafting")  # 동기 가드 → 잘못된 전이면 409
-    background.add_task(_bg_run_analysis, request.app, draft_id)
+    from web.production import use_celery
+
+    if use_celery():
+        from web.tasks import run_analysis_task
+
+        run_analysis_task.delay(draft_id)  # Redis 큐로 분리(영속)
+    else:
+        background.add_task(_bg_run_analysis, request.app, draft_id)
     return {"draft_id": draft_id, "status": "drafting"}
 
 
@@ -85,7 +96,14 @@ def feedback(
     ensure_transition(draft["status"], "revising")
     fb = body.model_dump()
     record_feedback(get_session_factory(request), draft_id, fb)
-    background.add_task(_bg_submit_feedback, request.app, draft_id, fb)
+    from web.production import use_celery
+
+    if use_celery():
+        from web.tasks import submit_feedback_task
+
+        submit_feedback_task.delay(draft_id, fb)  # Redis 큐로 분리(영속)
+    else:
+        background.add_task(_bg_submit_feedback, request.app, draft_id, fb)
     return {"draft_id": draft_id, "status": "revising"}
 
 

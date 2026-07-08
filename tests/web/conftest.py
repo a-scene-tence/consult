@@ -69,8 +69,7 @@ def _fake_final(**kwargs):
     }
 
 
-@pytest.fixture()
-def client():
+def _build_client():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False},
         poolclass=StaticPool, future=True,
@@ -88,6 +87,33 @@ def client():
     app = create_app(session_factory=session_factory, make_orchestrator=make_orchestrator)
     from fastapi.testclient import TestClient
 
-    with TestClient(app) as test_client:
-        test_client.app_session_factory = session_factory  # 필요 시 테스트에서 DB 직접 조회
-        yield test_client
+    tc = TestClient(app)
+    tc.app_session_factory = session_factory
+    return tc
+
+
+def login(tc, username: str, password: str) -> str:
+    """토큰 발급 헬퍼."""
+    r = tc.post("/api/auth/token", data={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()["access_token"]
+
+
+def auth_header(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def anon_client():
+    """인증 헤더가 없는 TestClient(권한 테스트용)."""
+    with _build_client() as tc:
+        yield tc
+
+
+@pytest.fixture()
+def client():
+    """admin 토큰이 기본 부착된 TestClient(워크플로 테스트용)."""
+    with _build_client() as tc:
+        token = login(tc, "admin", "admin-secret")
+        tc.headers.update(auth_header(token))
+        yield tc

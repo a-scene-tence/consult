@@ -14,8 +14,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from orchestrator import IllegalTransition, Orchestrator, SqlAlchemyStore
-from web.api import clients, consulting, dashboard
+from orchestrator import IllegalTransition
+from web.api import auth, clients, consulting, dashboard
 
 _WEB_DIR = Path(__file__).resolve().parent
 _TEMPLATES = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -36,8 +36,9 @@ def create_app(
     """FastAPI 앱 생성. 미주입 시 운영 기본값(실제 Agent + DATABASE_URL)을 사용한다."""
     session_factory = session_factory or _default_session_factory()
     if make_orchestrator is None:
-        def make_orchestrator(store: SqlAlchemyStore) -> Orchestrator:  # noqa: E306
-            return Orchestrator(store, case_store=case_store)
+        from web.production import make_prod_orchestrator
+
+        make_orchestrator = make_prod_orchestrator  # 실 Agent + celery-aware 적재 훅
 
     app = FastAPI(title="consult — 영세사업자 재무 컨설팅")
     app.state.session_factory = session_factory
@@ -53,6 +54,7 @@ def create_app(
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     # API 라우터.
+    app.include_router(auth.router)
     app.include_router(clients.router)
     app.include_router(consulting.router)
     app.include_router(dashboard.router)

@@ -3,6 +3,17 @@
 {% block body %}
 <h1 class="text-xl font-bold mb-4">관리자 백오피스</h1>
 
+<!-- 로그인 (전문가/admin) -->
+<section class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+  <h2 class="font-semibold mb-3">로그인 (전문가)</h2>
+  <div class="flex items-center gap-2 text-sm">
+    <input id="l-user" class="border rounded px-2 py-1" placeholder="아이디" value="admin" />
+    <input id="l-pass" type="password" class="border rounded px-2 py-1" placeholder="비밀번호" value="admin-secret" />
+    <button id="btn-login" class="bg-slate-800 text-white rounded px-3 py-1.5">로그인</button>
+    <span id="login-state" class="text-slate-500"></span>
+  </div>
+</section>
+
 <!-- A-0.5 고객(CRM) 프로필 등록 -->
 <section class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
   <h2 class="font-semibold mb-3">① 고객(CRM) 프로필 등록</h2>
@@ -61,6 +72,14 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
+  if (getToken()) el("login-state").textContent = "로그인됨";
+  el("btn-login").onclick = async () => {
+    try {
+      const d = await login(el("l-user").value, el("l-pass").value);
+      el("login-state").textContent = `로그인됨 (${d.role})`;
+    } catch (e) { el("login-state").textContent = "오류: " + e.message; }
+  };
+
   el("btn-register").onclick = async () => {
     try {
       const body = {
