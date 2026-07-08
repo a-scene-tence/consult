@@ -2,42 +2,101 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://consult.local/schemas/financials_pl.json",
   "title": "financials.pl",
-  "description": "PL(손익계산서) 확정 수치 페이로드. 연산 레이어(compute_pl)만이 생성하는 유일 수치 원천이며, Agent 1(PL 분석가)의 입력이다. SPEC §2.6.",
+  "description": "PL 확정 수치(v0.3 미시 분석). compute_pl 만이 생성하는 유일 수치 원천. SPEC §2.6. 파생(품목 마진·BEP 등)은 compute 사전 계산.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["meta", "accounts", "ratios", "milestones"],
+  "required": ["meta", "accounts", "unallocated_cash_sales", "sales_details", "cogs_details", "opex_details", "ratios", "bep", "milestones"],
   "properties": {
     "meta": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["client_id", "period", "prev_period", "currency", "computed_at"],
+      "required": ["client_id", "period", "prev_period", "currency", "business_days", "computed_at"],
       "properties": {
         "client_id": { "type": "string" },
-        "period": { "type": "string", "description": "예: 2025-Q2" },
-        "prev_period": { "type": "string", "description": "예: 2025-Q1" },
-        "currency": { "type": "string", "description": "예: KRW" },
+        "period": { "type": "string" },
+        "prev_period": { "type": ["string", "null"] },
+        "currency": { "type": "string" },
+        "business_days": { "type": "integer", "description": "해당 기간 영업일수(일일 타겟 산출용)" },
         "computed_at": { "type": "string", "format": "date-time" }
       }
     },
     "accounts": {
       "type": "array",
-      "description": "손익 계정과목별 확정 금액과 전기대비 증감률.",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["code", "name", "amount", "prev_amount", "yoy_pct"],
         "properties": {
-          "code": { "type": "string", "description": "예: REV, COGS, GP, OPEX, OP" },
+          "code": { "type": "string" },
           "name": { "type": "string" },
           "amount": { "type": "number" },
           "prev_amount": { "type": "number" },
-          "yoy_pct": { "type": "number", "description": "전기대비 증감률(%)" }
+          "yoy_pct": { "type": "number" }
+        }
+      }
+    },
+    "unallocated_cash_sales": {
+      "type": "object",
+      "description": "품목 매칭 불가 현금/계좌 매출(세무 리스크). risk_flag 는 compute 임계값 판정.",
+      "additionalProperties": false,
+      "required": ["amount", "pct_of_revenue", "risk_flag"],
+      "properties": {
+        "amount": { "type": "number" },
+        "pct_of_revenue": { "type": "number" },
+        "risk_flag": { "type": "string", "enum": ["ok", "warn", "critical"] }
+      }
+    },
+    "sales_details": {
+      "type": "array",
+      "description": "품목별 P*Q. unit_margin/margin_pct/contribution_margin/margin_rank 는 compute 사전 계산.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_name", "selling_price", "unit_cost", "quantity", "unit_margin", "margin_pct", "contribution_margin", "margin_rank"],
+        "properties": {
+          "item_name": { "type": "string" },
+          "selling_price": { "type": "number" },
+          "unit_cost": { "type": "number" },
+          "quantity": { "type": "number" },
+          "unit_margin": { "type": "number" },
+          "margin_pct": { "type": "number" },
+          "contribution_margin": { "type": "number" },
+          "margin_rank": { "type": "string", "enum": ["best", "mid", "worst"] }
+        }
+      }
+    },
+    "cogs_details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["material_category", "amount", "prev_amount", "yoy_pct"],
+        "properties": {
+          "material_category": { "type": "string" },
+          "amount": { "type": "number" },
+          "prev_amount": { "type": "number" },
+          "yoy_pct": { "type": "number" }
+        }
+      }
+    },
+    "opex_details": {
+      "type": "array",
+      "description": "판관비 세부. increase_rank 는 증가율 Top3(1~3) 또는 null.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["account_name", "amount", "prev_amount", "yoy_pct", "increase_rank"],
+        "properties": {
+          "account_name": { "type": "string" },
+          "amount": { "type": "number" },
+          "prev_amount": { "type": "number" },
+          "yoy_pct": { "type": "number" },
+          "increase_rank": { "type": ["integer", "null"] }
         }
       }
     },
     "ratios": {
       "type": "array",
-      "description": "수익성 비율. 예: GPM(매출총이익률), OPM(영업이익률).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -50,9 +109,22 @@
         }
       }
     },
+    "bep": {
+      "type": "object",
+      "description": "손익분기점. 모두 compute 사전 계산(CLAUDE §3.0).",
+      "additionalProperties": false,
+      "required": ["contribution_margin_ratio_pct", "fixed_cost", "bep_revenue", "bep_attainment_pct", "anchor_item", "daily_target_qty"],
+      "properties": {
+        "contribution_margin_ratio_pct": { "type": "number", "description": "가중 공헌이익률 = Σ(P−C)Q ÷ ΣPQ × 100" },
+        "fixed_cost": { "type": "number", "description": "고정비(OPEX 총액)" },
+        "bep_revenue": { "type": "number", "description": "fixed_cost ÷ 공헌이익률" },
+        "bep_attainment_pct": { "type": "number", "description": "REV ÷ bep_revenue × 100" },
+        "anchor_item": { "type": "string", "description": "주력 상품(공헌이익 최대 품목)" },
+        "daily_target_qty": { "type": "integer", "description": "ceil(bep_revenue ÷ business_days ÷ anchor P)" }
+      }
+    },
     "milestones": {
       "type": "array",
-      "description": "마일스톤 기반 성과(계획 대비 실적).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -62,7 +134,7 @@
           "name": { "type": "string" },
           "planned": { "type": "number" },
           "actual": { "type": "number" },
-          "variance_pct": { "type": "number", "description": "계획 대비 편차(%)" }
+          "variance_pct": { "type": "number" }
         }
       }
     }

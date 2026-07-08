@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/followup_context.json",
+  "title": "followup_context",
+  "description": "오케스트레이터가 Agent 1·2에 주입하는 시계열 이행 컨텍스트. SPEC §1.5, §2.6. metric_progress 는 compute 산출 확정치.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["is_first_round", "current_period"],
+  "properties": {
+    "is_first_round": { "type": "boolean", "description": "직전 회차가 없으면 true(baseline 모드)" },
+    "current_period": { "type": "string" },
+    "prev_period": { "type": ["string", "null"] },
+    "previous_recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rec_code", "text", "target_metric", "direction", "status"],
+        "properties": {
+          "rec_code": { "type": "string" },
+          "text": { "type": "string" },
+          "target_metric": { "type": "string" },
+          "direction": { "type": "string", "enum": ["increase", "decrease", "maintain"] },
+          "status": {
+            "type": "string",
+            "enum": ["proposed", "in_progress", "achieved", "not_achieved", "dropped"]
+          }
+        }
+      }
+    },
+    "metric_progress": {
+      "type": "array",
+      "description": "직전 vs 당기 확정치 비교 — compute 산출(P1). numeric_guard Golden Set 포함.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "direction"],
+        "anyOf": [
+          { "required": ["value_pct", "prev_value_pct"] },
+          { "required": ["value", "prev_value"] }
+        ],
+        "properties": {
+          "code": { "type": "string" },
+          "prev_value": { "type": "number" },
+          "value": { "type": "number" },
+          "prev_value_pct": { "type": "number" },
+          "value_pct": { "type": "number" },
+          "direction": { "type": "string", "enum": ["improved", "worsened", "flat"] }
+        }
+      }
+    }
+  }
+}

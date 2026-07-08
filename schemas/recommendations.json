@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/recommendations.json",
+  "title": "recommendations",
+  "description": "회차별 권고 배열. Agent 4 발행 시 구조화 저장, 다음 회차 Follow-up 이행 추적 기준. SPEC §2.6, §3.2.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["rec_code", "text", "target_metric", "direction"],
+    "properties": {
+      "rec_code": { "type": "string", "description": "예: R-2025Q3-01" },
+      "text": { "type": "string" },
+      "target_metric": { "type": "string", "description": "이행 추적 대상 지표 코드(예: ar_days, contribution_margin)" },
+      "direction": { "type": "string", "enum": ["increase", "decrease", "maintain"] },
+      "status": {
+        "type": "string",
+        "enum": ["proposed", "in_progress", "achieved", "not_achieved", "dropped"]
+      }
+    }
+  }
+}

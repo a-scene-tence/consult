@@ -43,6 +43,34 @@ FINANCIALS_KINDS: tuple[str, ...] = ("pl", "bs")
 # kb_ingestions.status 허용 값 — 지속 학습 적재 잡의 멱등성·재시도 추적 (SPEC §3.4).
 KB_INGESTION_STATUSES: tuple[str, ...] = ("pending", "success", "failed")
 
+# --- v0.3 CRM 프로필 enum (SPEC §2.6 client_profile, §3.2) ---
+# 상권 유형.
+DISTRICT_TYPES: tuple[str, ...] = (
+    "office",
+    "residential",
+    "floating",
+    "university",
+    "tourist",
+    "industrial",
+    "etc",
+)
+# 대표자 성별.
+OWNER_GENDERS: tuple[str, ...] = ("male", "female", "other")
+# 리스크 수용 성향.
+RISK_APPETITES: tuple[str, ...] = ("conservative", "moderate", "aggressive")
+
+# --- v0.3 recommendations enum (SPEC §3.2) ---
+# 권고 목표 방향.
+RECOMMENDATION_DIRECTIONS: tuple[str, ...] = ("increase", "decrease", "maintain")
+# 권고 이행 상태.
+RECOMMENDATION_STATUSES: tuple[str, ...] = (
+    "proposed",
+    "in_progress",
+    "achieved",
+    "not_achieved",
+    "dropped",
+)
+
 
 def _in_clause(column: str, values: tuple[str, ...]) -> str:
     """CHECK 제약용 IN 절 문자열 생성."""
@@ -55,18 +83,47 @@ class Base(DeclarativeBase):
 
 
 class Client(Base):
-    """고객 마스터."""
+    """고객 마스터 + CRM 프로필 (SPEC §2.6 client_profile, §3.2).
+
+    프로필은 에이전트 맞춤 분석·RAG 코호트 검색의 기준이 된다. `trade_name`(상호),
+    `location_raw`(정확 위치), `owner_age`(정확 나이)는 **내부 전용 PII** — RAG 적재 시
+    삭제/밴드화된다(`CLAUDE.md §3.5`).
+    """
 
     __tablename__ = "clients"
+    __table_args__ = (
+        CheckConstraint(
+            _in_clause("district_type", DISTRICT_TYPES), name="ck_clients_district_type"
+        ),
+        CheckConstraint(
+            _in_clause("owner_gender", OWNER_GENDERS), name="ck_clients_owner_gender"
+        ),
+        CheckConstraint(
+            _in_clause("risk_appetite", RISK_APPETITES), name="ck_clients_risk_appetite"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)  # 대표자명
+    # CRM 프로필 (등록 시 필수 — 기존 행 호환을 위해 컬럼 자체는 nullable)
+    trade_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 상호(PII)
+    industry: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    district_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    location_raw: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 내부 전용(PII)
+    owner_gender: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    owner_age: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 내부 전용(PII)
+    owner_age_band: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    risk_appetite: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    onboarded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     financials: Mapped[list["Financials"]] = relationship(back_populates="client")
     report_drafts: Mapped[list["ReportDraft"]] = relationship(back_populates="client")
+    recommendations: Mapped[list["Recommendation"]] = relationship(back_populates="client")
 
 
 class Financials(Base):
@@ -195,3 +252,42 @@ class KbIngestion(Base):
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+
+
+class Recommendation(Base):
+    """회차별 권고 (SPEC §2.6 recommendations, §3.2, §1.5 Follow-up).
+
+    Agent 4 발행 시 구조화 저장되며, 다음 회차 compute가 `metric_progress`로 이행 성과를
+    산출하고 전문가/시스템이 `status`를 갱신한다(시계열 전후 비교의 기준).
+    """
+
+    __tablename__ = "recommendations"
+    __table_args__ = (
+        CheckConstraint(
+            _in_clause("direction", RECOMMENDATION_DIRECTIONS),
+            name="ck_recommendations_direction",
+        ),
+        CheckConstraint(
+            _in_clause("status", RECOMMENDATION_STATUSES),
+            name="ck_recommendations_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    draft_id: Mapped[int] = mapped_column(
+        ForeignKey("report_drafts.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    period: Mapped[str] = mapped_column(String(32), nullable=False)
+    rec_code: Mapped[str] = mapped_column(String(32), nullable=False)  # 예: R-2025Q3-01
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    target_metric: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="proposed")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    client: Mapped["Client"] = relationship(back_populates="recommendations")

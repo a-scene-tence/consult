@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/client_profile.json",
+  "title": "client_profile",
+  "description": "CRM 고객 프로필. 에이전트 맞춤 분석·RAG 코호트 검색의 기준. SPEC §2.6. trade_name/location_raw/owner_age 는 내부 전용 PII.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["client_id", "industry", "district_type", "owner_gender", "owner_age_band", "risk_appetite"],
+  "properties": {
+    "client_id": { "type": "string" },
+    "trade_name": { "type": "string", "description": "상호(내부 전용 PII — RAG 적재 시 삭제)" },
+    "industry": { "type": "string" },
+    "district_type": {
+      "type": "string",
+      "enum": ["office", "residential", "floating", "university", "tourist", "industrial", "etc"]
+    },
+    "location_raw": { "type": "string", "description": "정확 위치(내부 전용 PII — RAG 적재 시 삭제, 상권 밴드만 유지)" },
+    "owner_gender": { "type": "string", "enum": ["male", "female", "other"] },
+    "owner_age": { "type": "integer", "description": "정확 나이(내부 전용 PII — RAG 적재 시 밴드화)" },
+    "owner_age_band": { "type": "string", "description": "예: '30대 초중반'" },
+    "risk_appetite": { "type": "string", "enum": ["conservative", "moderate", "aggressive"] },
+    "onboarded_at": { "type": "string" }
+  }
+}

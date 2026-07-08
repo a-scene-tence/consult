@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://consult.local/schemas/financials_bs.json",
   "title": "financials.bs",
-  "description": "BS(재무상태표) 확정 수치 페이로드. 연산 레이어(compute_bs)만이 생성하는 유일 수치 원천이며, Agent 2(BS 분석가)의 입력이다. SPEC §2.6.",
+  "description": "BS 확정 수치(v0.3 실전 현금흐름). compute_bs 만이 생성하는 유일 수치 원천. SPEC §2.6. CCC·DSCR·Runway·세무 이벤트는 compute 사전 계산.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["meta", "accounts", "ratios"],
+  "required": ["meta", "accounts", "inventory_details", "debt_details", "working_capital_details", "owner_draws", "ratios", "cash_flow", "upcoming_tax_events"],
   "properties": {
     "meta": {
       "type": "object",
@@ -13,14 +13,14 @@
       "required": ["client_id", "period", "currency", "computed_at"],
       "properties": {
         "client_id": { "type": "string" },
-        "period": { "type": "string", "description": "예: 2025-Q2" },
-        "currency": { "type": "string", "description": "예: KRW" },
+        "period": { "type": "string" },
+        "currency": { "type": "string" },
         "computed_at": { "type": "string", "format": "date-time" }
       }
     },
     "accounts": {
       "type": "array",
-      "description": "재무상태표 계정과목별 확정 금액. 예: CA, CL, INV, AR, AP, DEBT, EQUITY.",
+      "description": "재무상태표 계정. CASH(현금및예금)는 Cash Runway 산출에 사용.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -32,9 +32,54 @@
         }
       }
     },
+    "inventory_details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "amount", "days_in_inventory"],
+        "properties": {
+          "category": { "type": "string" },
+          "amount": { "type": "number" },
+          "days_in_inventory": { "type": "number" }
+        }
+      }
+    },
+    "debt_details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lender", "amount", "interest_rate", "monthly_payment"],
+        "properties": {
+          "lender": { "type": "string" },
+          "amount": { "type": "number" },
+          "interest_rate": { "type": "number" },
+          "monthly_payment": { "type": "number" }
+        }
+      }
+    },
+    "working_capital_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ar_days", "ap_days"],
+      "properties": {
+        "ar_days": { "type": "number" },
+        "ap_days": { "type": "number" }
+      }
+    },
+    "owner_draws": {
+      "type": "object",
+      "description": "오너 자금 혼용. suspense_receipts=가수금, suspense_payments=가지급금.",
+      "additionalProperties": false,
+      "required": ["suspense_receipts", "suspense_payments"],
+      "properties": {
+        "suspense_receipts": { "type": "number" },
+        "suspense_payments": { "type": "number" }
+      }
+    },
     "ratios": {
       "type": "array",
-      "description": "재무 건전성 지표. 비율은 value_pct(%), 금액성 지표(운전자본 등)는 value 사용.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -44,10 +89,37 @@
           { "required": ["value"] }
         ],
         "properties": {
-          "code": { "type": "string", "description": "예: CR(유동비율), WC(운전자본), DR(부채비율)" },
+          "code": { "type": "string" },
           "name": { "type": "string" },
           "value_pct": { "type": "number" },
           "value": { "type": "number" }
+        }
+      }
+    },
+    "cash_flow": {
+      "type": "object",
+      "description": "실전 현금흐름 지표. 모두 compute 사전 계산(CLAUDE §3.0).",
+      "additionalProperties": false,
+      "required": ["cash_conversion_cycle_days", "dscr", "monthly_debt_service", "monthly_fixed_cost", "cash_runway_months"],
+      "properties": {
+        "cash_conversion_cycle_days": { "type": "number", "description": "재고일수(가중) + AR일수 − AP일수" },
+        "dscr": { "type": "number", "description": "(영업이익 + 감가상각) ÷ 기간 원리금 총액" },
+        "monthly_debt_service": { "type": "number", "description": "Σ debt_details[].monthly_payment" },
+        "monthly_fixed_cost": { "type": "number", "description": "월 고정비(OPEX ÷ 기간 개월수)" },
+        "cash_runway_months": { "type": "number", "description": "가용현금(CASH) ÷ 월 고정비" }
+      }
+    },
+    "upcoming_tax_events": {
+      "type": "array",
+      "description": "세무 캘린더 대조 결과(compute 산출). Agent 2 는 인용만.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "due_date", "months_until"],
+        "properties": {
+          "name": { "type": "string" },
+          "due_date": { "type": "string" },
+          "months_until": { "type": "number" }
         }
       }
     }
