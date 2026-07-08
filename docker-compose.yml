@@ -1,0 +1,76 @@
+# consult — 전체 인프라 한 방 기동 (Phase 7): docker-compose up --build
+# 구성: PostgreSQL + Redis + FastAPI 웹 + Celery 워커 (+ 선택: ChromaDB)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: consult
+      POSTGRES_PASSWORD: consult
+      POSTGRES_DB: consult
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consult -d consult"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build: .
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://consult:consult@db:5432/consult
+      REDIS_URL: redis://redis:6379/0
+      TASK_BACKEND: celery
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      LLM_MODEL: ${LLM_MODEL:-claude-opus-4-8}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RUN_MIGRATIONS: "1"   # 웹 컨테이너가 마이그레이션 수행
+      SEED_USERS: "1"       # 데모 계정 시드(운영은 0)
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: .
+    command: ["celery", "-A", "web.celery_app", "worker", "-l", "info"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://consult:consult@db:5432/consult
+      REDIS_URL: redis://redis:6379/0
+      TASK_BACKEND: celery
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      LLM_MODEL: ${LLM_MODEL:-claude-opus-4-8}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RUN_MIGRATIONS: "0"   # 워커는 마이그레이션 미수행(웹이 담당)
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  # 선택: RAG(ChromaDB). 활성화: docker-compose --profile rag up
+  chroma:
+    image: chromadb/chroma:latest
+    profiles: ["rag"]
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadata:/chroma/chroma
+
+volumes:
+  pgdata:
+  chromadata:

@@ -66,6 +66,9 @@ OWNER_GENDERS: tuple[str, ...] = ("male", "female", "other")
 # 리스크 수용 성향.
 RISK_APPETITES: tuple[str, ...] = ("conservative", "moderate", "aggressive")
 
+# --- Phase 7: 인증 사용자 역할 ---
+USER_ROLES: tuple[str, ...] = ("admin", "client")
+
 # --- v0.3 recommendations enum (SPEC §3.2) ---
 # 권고 목표 방향.
 RECOMMENDATION_DIRECTIONS: tuple[str, ...] = ("increase", "decrease", "maintain")
@@ -298,3 +301,26 @@ class Recommendation(Base):
     )
 
     client: Mapped["Client"] = relationship(back_populates="recommendations")
+
+
+class User(Base):
+    """인증 사용자 (Phase 7). bcrypt 해시 비밀번호 저장.
+
+    role=admin(전문가) 은 전권, role=client(사장님) 은 `client_id`(느슨 참조)의 대시보드만
+    조회한다. 하드코딩 계정을 폐기하고 이 테이블로 인증한다.
+    """
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(_in_clause("role", USER_ROLES), name="ck_users_role"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    # client 역할이 바인딩되는 고객 id(느슨 참조 — FK 미설정, 시드 편의).
+    client_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

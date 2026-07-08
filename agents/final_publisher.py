@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agents.base import _section, build_system_prompt, structured_call
+from agents.base import _section, build_system_prompt, self_healing_call
 from compute._common import load_schema, validate_payload
 from guards.numeric_guard import (
     NumericGuardViolation,
@@ -114,28 +114,29 @@ def analyze_final(
         agent3_draft, expert_feedback, financials_pl, financials_bs,
         client_profile, followup_context,
     )
-    output = structured_call(
-        system=system,
-        user=user,
-        tool_name=_TOOL_NAME,
-        tool_description="최종본·대시보드·권고를 복합 스키마로 제출한다.",
-        input_schema=load_schema(_SCHEMA_NAME),
-        client=client,
-    )
-
-    # 1) 복합 스키마 검증 → 2) 하위 계약 이중 검증(각 standalone 스키마).
-    validate_payload(output, _SCHEMA_NAME)
-    validate_payload(output["dashboard_payload"], "dashboard_payload")
-    validate_payload(output["recommendations"], "recommendations")
-
     sources = [
         src
         for src in (financials_pl, financials_bs, followup_context, client_profile)
         if src is not None
     ]
-    violations = find_hallucinated_numbers(sources, output)
-    if violations:
-        raise NumericGuardViolation(
-            f"[{AGENT_NAME}] 환각 수치 감지(Golden Set에 없는 값): {violations}"
-        )
-    return output
+
+    def _validate(output: dict[str, Any]) -> None:
+        # 1) 복합 스키마 검증 → 2) 하위 계약 이중 검증(각 standalone 스키마) → 3) 환각 가드.
+        validate_payload(output, _SCHEMA_NAME)
+        validate_payload(output["dashboard_payload"], "dashboard_payload")
+        validate_payload(output["recommendations"], "recommendations")
+        violations = find_hallucinated_numbers(sources, output)
+        if violations:
+            raise NumericGuardViolation(
+                f"[{AGENT_NAME}] 환각 수치 감지(Golden Set에 없는 값): {violations}"
+            )
+
+    return self_healing_call(
+        system=system,
+        user=user,
+        tool_name=_TOOL_NAME,
+        tool_description="최종본·대시보드·권고를 복합 스키마로 제출한다.",
+        input_schema=load_schema(_SCHEMA_NAME),
+        validate=_validate,
+        client=client,
+    )

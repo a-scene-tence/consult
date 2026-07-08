@@ -128,6 +128,29 @@ def test_full_pipeline_persists_to_published(seeded):
         assert len(kb) == 1 and kb[0].status == "success"
 
 
+def test_agents_1_2_run_in_parallel(seeded):
+    """A1·A2 가 병렬 실행되어 총 대기시간이 (합이 아니라) 한쪽 수준으로 단축된다."""
+    import time
+
+    store, did, _ = seeded
+    delay = 0.2
+
+    def _slow_pl(**kwargs):
+        time.sleep(delay)
+        return {"agent": "pl_analyst", "summary": "PL"}
+
+    def _slow_bs(**kwargs):
+        time.sleep(delay)
+        return {"agent": "bs_analyst", "summary": "BS"}
+
+    orch = _orch(store, pl_fn=_slow_pl, bs_fn=_slow_bs)
+    started = time.monotonic()
+    orch.run_analysis(did)
+    elapsed = time.monotonic() - started
+    # 순차라면 ~2*delay, 병렬이면 ~delay. 여유를 두고 1.5*delay 미만이면 병렬로 판정.
+    assert elapsed < delay * 1.5, f"병렬 실행 아님(elapsed={elapsed:.3f}s)"
+
+
 def test_illegal_transition_rejected(seeded):
     store, did, _ = seeded
     orch = _orch(store)
@@ -155,5 +178,6 @@ def test_agent_failure_marks_failed(seeded):
         orch.run_analysis(did)
     assert store.get_draft(did)["status"] == "failed"  # 트랜잭션 커밋됨
     with sf() as s:
-        last = s.query(AgentRun).order_by(AgentRun.id.desc()).first()
-        assert last.validation_passed is False and last.output_hash is None
+        # 병렬 실행이므로 실패한 pl_analyst run 이 validation_passed=False 로 기록된다.
+        pl_run = s.query(AgentRun).filter_by(agent="pl_analyst").one()
+        assert pl_run.validation_passed is False and pl_run.output_hash is None

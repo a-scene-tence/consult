@@ -22,6 +22,9 @@ dependencies = [
     "PyJWT>=2.8",
     "celery>=5.3",
     "redis>=5.0",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt<4.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +41,7 @@ rag = [
 # schemas/ 는 데이터(JSON), web/templates·static 은 정적 자산(패키지 데이터).
 [tool.setuptools]
 packages = ["compute", "db", "agents", "rag", "guards", "web", "web.api"]
+py-modules = ["main", "orchestrator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

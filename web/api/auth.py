@@ -4,18 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
+from web.api import get_session_factory
 from web.auth import authenticate, create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/token")
-def login(form: OAuth2PasswordRequestForm = Depends()) -> dict[str, Any]:
-    """OAuth2 password flow — username/password 로 JWT 발급."""
-    user = authenticate(form.username, form.password)
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends()) -> dict[str, Any]:
+    """OAuth2 password flow — username/password 로 JWT 발급(users 테이블 검증)."""
+    user = authenticate(get_session_factory(request), form.username, form.password)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

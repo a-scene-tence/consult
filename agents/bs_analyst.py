@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agents.base import build_system_prompt, build_user_message, structured_call
+from agents.base import build_system_prompt, build_user_message, self_healing_call
 from compute._common import load_schema, validate_payload
 from guards.numeric_guard import (
     NumericGuardViolation,
@@ -64,21 +64,22 @@ def analyze_bs(
     """
     system = build_system_prompt(_PERSONA, _RESPONSIBILITIES, _BOUNDARIES) + "\n\n" + _TASK_RULES
     user = build_user_message(financials_bs, client_profile, followup_context, rag_context)
-    output = structured_call(
+    sources = golden_sources(financials_bs, client_profile, followup_context)
+
+    def _validate(output: dict[str, Any]) -> None:
+        validate_payload(output, _SCHEMA_NAME)
+        violations = find_hallucinated_numbers(sources, output)
+        if violations:
+            raise NumericGuardViolation(
+                f"[{AGENT_NAME}] 환각 수치 감지(Golden Set에 없는 값): {violations}"
+            )
+
+    return self_healing_call(
         system=system,
         user=user,
         tool_name=_TOOL_NAME,
         tool_description="BS 분석 결과를 지정 스키마로 제출한다.",
         input_schema=load_schema(_SCHEMA_NAME),
+        validate=_validate,
         client=client,
     )
-
-    validate_payload(output, _SCHEMA_NAME)
-
-    sources = golden_sources(financials_bs, client_profile, followup_context)
-    violations = find_hallucinated_numbers(sources, output)
-    if violations:
-        raise NumericGuardViolation(
-            f"[{AGENT_NAME}] 환각 수치 감지(Golden Set에 없는 값): {violations}"
-        )
-    return output

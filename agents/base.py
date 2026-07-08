@@ -103,21 +103,25 @@ def _tool_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in schema.items() if k not in ("$schema", "$id", "title")}
 
 
-def structured_call(
+def _default_max_attempts() -> int:
+    """자가치유 재시도 최대 횟수(.env LLM_MAX_ATTEMPTS, 기본 3)."""
+    try:
+        return max(1, int(os.environ.get("LLM_MAX_ATTEMPTS", "3")))
+    except ValueError:
+        return 3
+
+
+def _structured_call_messages(
     *,
     system: str,
-    user: str,
+    messages: list[dict[str, Any]],
     tool_name: str,
     tool_description: str,
     input_schema: dict[str, Any],
-    client: Any | None = None,
-    max_tokens: int = 4096,
+    client: Any | None,
+    max_tokens: int,
 ) -> dict[str, Any]:
-    """forced tool_choice로 Messages API를 호출하고 tool_use 입력(dict)을 반환한다.
-
-    `client`를 주입하면(테스트) 실제 네트워크 호출 없이 동작한다. 강제 도구 호출과의
-    호환을 위해 thinking 파라미터는 사용하지 않는다.
-    """
+    """messages 히스토리로 forced tool_choice 호출 → tool_use 입력(dict) 반환."""
     client = client or _default_client()
     response = client.messages.create(
         model=_resolve_model(),
@@ -131,9 +135,92 @@ def structured_call(
             }
         ],
         tool_choice={"type": "tool", "name": tool_name},
-        messages=[{"role": "user", "content": user}],
+        messages=messages,
     )
     for block in response.content:
         if getattr(block, "type", None) == "tool_use":
             return dict(block.input)
     raise AgentOutputError("모델 응답에 tool_use 블록이 없습니다(구조화 출력 실패).")
+
+
+def structured_call(
+    *,
+    system: str,
+    user: str,
+    tool_name: str,
+    tool_description: str,
+    input_schema: dict[str, Any],
+    client: Any | None = None,
+    max_tokens: int = 4096,
+) -> dict[str, Any]:
+    """forced tool_choice로 Messages API를 1회 호출하고 tool_use 입력(dict)을 반환한다.
+
+    `client`를 주입하면(테스트) 실제 네트워크 호출 없이 동작한다. 강제 도구 호출과의
+    호환을 위해 thinking 파라미터는 사용하지 않는다.
+    """
+    return _structured_call_messages(
+        system=system,
+        messages=[{"role": "user", "content": user}],
+        tool_name=tool_name,
+        tool_description=tool_description,
+        input_schema=input_schema,
+        client=client,
+        max_tokens=max_tokens,
+    )
+
+
+def _correction_message(exc: Exception) -> str:
+    """실패 원인을 모델에 되먹이는 자가치유 교정 프롬프트(Strict Rule 위반 교정 유도)."""
+    return (
+        "[System Error] 직전 응답이 시스템 검증을 통과하지 못했습니다.\n"
+        f"원인: {exc}\n"
+        "너는 숫자를 계산·추정·반올림하지 않는다(Strict Rule). 입력으로 제공된 확정 수치(JSON)에 "
+        "없는 숫자(예: '약 15%' 같은 근사치·환각)를 만들어냈다면 그 숫자를 빼거나, 반드시 확정 "
+        "수치만 그대로 인용해서 다시 작성하라. 스키마 필수 필드가 누락됐다면 채워라. "
+        "반드시 제공된 도구를 다시 호출해 지정 JSON 스키마로만 응답하라."
+    )
+
+
+def self_healing_call(
+    *,
+    system: str,
+    user: str,
+    tool_name: str,
+    tool_description: str,
+    input_schema: dict[str, Any],
+    validate: Any,
+    client: Any | None = None,
+    max_attempts: int | None = None,
+    max_tokens: int = 4096,
+) -> dict[str, Any]:
+    """자가치유 구조화 호출 — 검증 실패 시 실패 원인을 주입해 최대 N회 재작성 유도.
+
+    `validate(output)` 는 검증에 성공하면 조용히 반환하고, 실패하면 예외를 던진다(스키마
+    `ValueError`·`NumericGuardViolation` 등). 마지막 시도까지 실패하면 그 예외를 그대로 전파해
+    호출측 예외 타입 계약을 보존한다. 재시도 시 직전(불량) 출력과 교정 지시를 메시지 히스토리에
+    추가 주입하여 모델이 스스로 오류를 교정하도록 유도한다(Self-Healing).
+    """
+    attempts = max_attempts or _default_max_attempts()
+    messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
+    for attempt in range(1, attempts + 1):
+        output = _structured_call_messages(
+            system=system,
+            messages=messages,
+            tool_name=tool_name,
+            tool_description=tool_description,
+            input_schema=input_schema,
+            client=client,
+            max_tokens=max_tokens,
+        )
+        try:
+            validate(output)
+            return output
+        except Exception as exc:  # 스키마/가드 위반 등 — 마지막 시도면 전파
+            if attempt >= attempts:
+                raise
+            # 직전 불량 출력(assistant)과 교정 지시(user)를 히스토리에 추가 → 자가 교정.
+            messages.append(
+                {"role": "assistant", "content": json.dumps(output, ensure_ascii=False)}
+            )
+            messages.append({"role": "user", "content": _correction_message(exc)})
+    raise AgentOutputError("자가치유 재시도 로직 오류(도달 불가)")  # pragma: no cover

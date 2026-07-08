@@ -76,6 +76,9 @@ def _build_client():
     )
     create_all(engine)
     session_factory = make_session_factory(engine)
+    from web.auth import seed_default_users
+
+    seed_default_users(session_factory)  # admin / owner(client_id=1) 시드
     case_store = InMemoryCaseStore()
 
     def make_orchestrator(store):

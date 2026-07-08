@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agents.base import _section, build_system_prompt, structured_call
+from agents.base import _section, build_system_prompt, self_healing_call
 from compute._common import load_schema, validate_payload
 from guards.numeric_guard import (
     NumericGuardViolation,
@@ -90,21 +90,22 @@ def analyze_report(
     """
     system = build_system_prompt(_PERSONA, _RESPONSIBILITIES, _BOUNDARIES) + "\n\n" + _TASK_RULES
     user = _build_report_user_message(agent1_output, agent2_output, client_profile)
-    output = structured_call(
+    sources = [src for src in (agent1_output, agent2_output, client_profile) if src is not None]
+
+    def _validate(output: dict[str, Any]) -> None:
+        validate_payload(output, _SCHEMA_NAME)
+        violations = find_hallucinated_numbers(sources, output)
+        if violations:
+            raise NumericGuardViolation(
+                f"[{AGENT_NAME}] 환각 수치 감지(Golden Set에 없는 값): {violations}"
+            )
+
+    return self_healing_call(
         system=system,
         user=user,
         tool_name=_TOOL_NAME,
         tool_description="종합 초안과 상호 모순 점검 결과를 지정 스키마로 제출한다.",
         input_schema=load_schema(_SCHEMA_NAME),
+        validate=_validate,
         client=client,
     )
-
-    validate_payload(output, _SCHEMA_NAME)
-
-    sources = [src for src in (agent1_output, agent2_output, client_profile) if src is not None]
-    violations = find_hallucinated_numbers(sources, output)
-    if violations:
-        raise NumericGuardViolation(
-            f"[{AGENT_NAME}] 환각 수치 감지(Golden Set에 없는 값): {violations}"
-        )
-    return output

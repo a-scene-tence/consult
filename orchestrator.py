@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol
 
 from agents.base import DEFAULT_MODEL
@@ -269,31 +270,44 @@ class Orchestrator:
         """오류 시 어느 상태에서든 failed 로 강제(전이 검증 우회)."""
         self.store.set_status(draft_id, "failed")
 
+    def _invoke_agent(
+        self, agent_name: str, fn: Any, agent_inputs: Any, **call_kwargs: Any
+    ) -> dict[str, Any]:
+        """에이전트를 호출하고 결과 레코드를 만든다(DB 미접근 — 스레드 병렬 실행 안전)."""
+        started = time.monotonic()
+        try:
+            output, error = fn(**call_kwargs, client=self.client), None
+        except Exception as exc:  # noqa: BLE001 — 상위에서 처리
+            output, error = None, exc
+        return {
+            "agent": agent_name,
+            "input_hash": _sha256(agent_inputs),
+            "output": output,
+            "error": error,
+            "latency_ms": int((time.monotonic() - started) * 1000),
+        }
+
+    def _record_run(self, draft_id: int, rec: dict[str, Any]) -> None:
+        """_invoke_agent 결과를 agent_runs 에 직렬 기록(트랜잭션)."""
+        ok = rec["error"] is None
+        self.store.add_agent_run({
+            "draft_id": draft_id, "agent": rec["agent"],
+            "input_hash": rec["input_hash"],
+            "output_hash": _sha256(rec["output"]) if ok else None,
+            "model": _resolve_model(), "latency_ms": rec["latency_ms"],
+            "validation_passed": ok,
+        })
+
     def _run_agent(
         self, agent_name: str, draft_id: int, fn: Any, agent_inputs: Any, /, **call_kwargs: Any
     ) -> dict[str, Any]:
-        """에이전트 호출을 감사 로그로 래핑. 예외 시 status=failed 기록 후 재-raise."""
-        started = time.monotonic()
-        try:
-            output = fn(**call_kwargs, client=self.client)
-        except Exception:
-            self.store.add_agent_run({
-                "draft_id": draft_id, "agent": agent_name,
-                "input_hash": _sha256(agent_inputs), "output_hash": None,
-                "model": _resolve_model(),
-                "latency_ms": int((time.monotonic() - started) * 1000),
-                "validation_passed": False,
-            })
+        """단일 에이전트 호출 + 감사 기록. 예외 시 status=failed 기록 후 재-raise."""
+        rec = self._invoke_agent(agent_name, fn, agent_inputs, **call_kwargs)
+        self._record_run(draft_id, rec)
+        if rec["error"] is not None:
             self._mark_failed(draft_id)
-            raise
-        self.store.add_agent_run({
-            "draft_id": draft_id, "agent": agent_name,
-            "input_hash": _sha256(agent_inputs), "output_hash": _sha256(output),
-            "model": _resolve_model(),
-            "latency_ms": int((time.monotonic() - started) * 1000),
-            "validation_passed": True,
-        })
-        return output
+            raise rec["error"]
+        return rec["output"]
 
     def _retrieve_rag(
         self, profile: dict[str, Any] | None, fin_pl: dict[str, Any], fin_bs: dict[str, Any]
@@ -317,17 +331,31 @@ class Orchestrator:
         followup = inputs.get("followup_context")
         rag_context = self._retrieve_rag(profile, fin_pl, fin_bs)
 
-        # Agent 1·2 는 상호 독립 — 병렬 호출 가능(현재는 순차). Agent 3 은 둘을 기다린다.
-        a1 = self._run_agent(
-            "pl_analyst", draft_id, self.pl_fn, {"kind": "pl_analysis"},
-            financials_pl=fin_pl, client_profile=profile, followup_context=followup,
-            rag_context=rag_context,
-        )
-        a2 = self._run_agent(
-            "bs_analyst", draft_id, self.bs_fn, {"kind": "bs_analysis"},
-            financials_bs=fin_bs, client_profile=profile, followup_context=followup,
-            rag_context=rag_context,
-        )
+        # Agent 1·2 는 상호 독립 — **병렬 실행**으로 LLM 대기시간을 절반으로 단축.
+        # LLM 호출만 스레드로 병렬화하고, 감사 로그(DB) 기록은 이후 직렬로 수행(트랜잭션 안전).
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_pl = pool.submit(
+                self._invoke_agent, "pl_analyst", self.pl_fn, {"kind": "pl_analysis"},
+                financials_pl=fin_pl, client_profile=profile, followup_context=followup,
+                rag_context=rag_context,
+            )
+            fut_bs = pool.submit(
+                self._invoke_agent, "bs_analyst", self.bs_fn, {"kind": "bs_analysis"},
+                financials_bs=fin_bs, client_profile=profile, followup_context=followup,
+                rag_context=rag_context,
+            )
+            rec_pl, rec_bs = fut_pl.result(), fut_bs.result()
+
+        # 감사 기록은 결정적 순서(pl → bs)로 직렬 기록.
+        self._record_run(draft_id, rec_pl)
+        self._record_run(draft_id, rec_bs)
+        for rec in (rec_pl, rec_bs):
+            if rec["error"] is not None:
+                self._mark_failed(draft_id)
+                raise rec["error"]
+        a1, a2 = rec_pl["output"], rec_bs["output"]
+
+        # Agent 3 은 A1·A2 결과를 모두 기다린 뒤 순차 실행.
         a3 = self._run_agent(
             "report_master", draft_id, self.report_fn, {"kind": "draft_report"},
             agent1_output=a1, agent2_output=a2, client_profile=profile,
