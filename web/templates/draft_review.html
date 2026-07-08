@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}초안 검토 — draft {{ draft_id }}{% endblock %}
+{% block body %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-xl font-bold">초안 검토 (A-3) · draft #{{ draft_id }}</h1>
+  <span id="status-badge" class="text-xs px-2 py-1 rounded bg-slate-200">…</span>
+</div>
+
+<!-- 상호 모순 플래그 -->
+<section id="contradictions" class="hidden bg-amber-50 border border-amber-300 rounded-xl p-4 mb-4">
+  <h2 class="font-semibold text-amber-800 mb-2">⚠ 상호 모순 점검 (contradiction_flags)</h2>
+  <ul id="contra-list" class="text-sm list-disc pl-5 text-amber-900"></ul>
+</section>
+
+<div class="grid md:grid-cols-2 gap-4">
+  <!-- 확정 수치 요약 -->
+  <section class="bg-white rounded-xl border border-slate-200 p-4">
+    <h2 class="font-semibold mb-2">확정 수치 (Source of Truth)</h2>
+    <dl id="financials" class="text-sm grid grid-cols-2 gap-1"></dl>
+  </section>
+
+  <!-- 초안 섹션 -->
+  <section class="bg-white rounded-xl border border-slate-200 p-4">
+    <h2 class="font-semibold mb-2">초안 (Agent 3/4)</h2>
+    <div id="sections" class="text-sm space-y-2"></div>
+  </section>
+</div>
+
+<!-- A-4 전문가 피드백 -->
+<section class="bg-white rounded-xl border border-slate-200 p-4 mt-4">
+  <h2 class="font-semibold mb-2">전문가 피드백</h2>
+  <input id="fb-reviewer" class="border rounded px-2 py-1 text-sm w-full mb-2" placeholder="검토자" value="전문가" />
+  <textarea id="fb-note" class="border rounded px-2 py-1 text-sm w-full h-20" placeholder="전역 지시(overall_note) — 최우선 반영"></textarea>
+  <div class="mt-3 flex gap-2">
+    <button id="btn-feedback" class="bg-indigo-600 text-white text-sm rounded px-3 py-1.5">피드백 전송 (재작성)</button>
+    <button id="btn-approve" class="bg-emerald-600 text-white text-sm rounded px-3 py-1.5">승인 · 발행</button>
+    <button id="btn-refresh" class="border text-sm rounded px-3 py-1.5">새로고침</button>
+  </div>
+  <p id="action-result" class="text-sm mt-2 text-slate-600"></p>
+</section>
+
+<script>
+const DRAFT_ID = {{ draft_id }};
+
+function fmt(v) { return typeof v === "number" ? v.toLocaleString() : v; }
+
+async function load() {
+  try {
+    const d = await apiGet(`/api/consulting/${DRAFT_ID}`);
+    el("status-badge").textContent = `${d.status} · v${d.version}`;
+
+    // 확정 수치 요약
+    const fin = el("financials"); fin.innerHTML = "";
+    const pl = d.financials_pl || {}, bs = d.financials_bs || {};
+    const rows = [];
+    if (pl.bep) { rows.push(["BEP 달성률", (pl.bep.bep_attainment_pct) + "%"]);
+                  rows.push(["일일 목표수량", pl.bep.daily_target_qty + "개"]); }
+    (pl.ratios || []).forEach(r => rows.push([r.code, (r.value_pct ?? r.value) + (r.value_pct!=null?"%":"")]));
+    if (bs.cash_flow) { rows.push(["현금 생존", bs.cash_flow.cash_runway_months + "개월"]);
+                        rows.push(["DSCR", bs.cash_flow.dscr]); }
+    rows.forEach(([k, v]) => {
+      fin.insertAdjacentHTML("beforeend",
+        `<dt class="text-slate-500">${k}</dt><dd class="font-medium text-right">${fmt(v)}</dd>`);
+    });
+
+    // 모순 플래그
+    const flags = d.contradiction_flags || [];
+    if (flags.length) {
+      el("contradictions").classList.remove("hidden");
+      el("contra-list").innerHTML = flags.map(f =>
+        `<li>[${(f.between||[]).join(" ↔ ")}] ${f.text} ${f.resolved ? "(조정됨)" : ""}</li>`).join("");
+    }
+
+    // 초안 섹션
+    const secs = (d.payload && d.payload.sections) || [];
+    el("sections").innerHTML = secs.map(s =>
+      `<div><div class="font-semibold">${s.title}</div><div class="text-slate-600 whitespace-pre-line">${s.body_md}</div></div>`
+    ).join("") || '<p class="text-slate-400">초안 생성 중…</p>';
+  } catch (e) { el("action-result").textContent = "오류: " + e.message; }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  load();
+  el("btn-refresh").onclick = load;
+  el("btn-feedback").onclick = async () => {
+    try {
+      await apiPost(`/api/consulting/${DRAFT_ID}/feedback`,
+        { reviewer: el("fb-reviewer").value, overall_note: el("fb-note").value, instructions: [] });
+      el("action-result").textContent = "피드백 전송됨 — 재작성 중. 새로고침하세요.";
+    } catch (e) { el("action-result").textContent = "오류: " + e.message; }
+  };
+  el("btn-approve").onclick = async () => {
+    try {
+      const d = await apiPost(`/api/consulting/${DRAFT_ID}/approve`, {});
+      el("action-result").textContent = `발행 완료 (${d.status}).`;
+    } catch (e) { el("action-result").textContent = "오류: " + e.message; }
+  };
+});
+</script>
+{% endblock %}

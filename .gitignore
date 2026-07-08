@@ -26,3 +26,7 @@ env/
 
 # 로컬 데이터
 *.sqlite3
+
+# 로컬 스모크 DB
+*.db
+.smoke.db

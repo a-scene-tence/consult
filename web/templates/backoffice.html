@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}백오피스 — 고객 등록 · 데이터 업로드{% endblock %}
+{% block body %}
+<h1 class="text-xl font-bold mb-4">관리자 백오피스</h1>
+
+<!-- A-0.5 고객(CRM) 프로필 등록 -->
+<section class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+  <h2 class="font-semibold mb-3">① 고객(CRM) 프로필 등록</h2>
+  <div class="grid grid-cols-2 gap-3 text-sm">
+    <input id="c-name" class="border rounded px-2 py-1" placeholder="대표자명 (name)" />
+    <input id="c-trade" class="border rounded px-2 py-1" placeholder="상호 trade_name (내부 PII)" />
+    <input id="c-industry" class="border rounded px-2 py-1" placeholder="업종 industry" value="치킨전문점" />
+    <select id="c-district" class="border rounded px-2 py-1">
+      <option value="office">office(오피스)</option>
+      <option value="residential">residential(주거)</option>
+      <option value="floating">floating(유동)</option>
+      <option value="university">university</option>
+      <option value="tourist">tourist</option>
+      <option value="industrial">industrial</option>
+      <option value="etc">etc</option>
+    </select>
+    <select id="c-gender" class="border rounded px-2 py-1">
+      <option value="female">female</option>
+      <option value="male">male</option>
+      <option value="other">other</option>
+    </select>
+    <input id="c-ageband" class="border rounded px-2 py-1" placeholder="연령대 owner_age_band" value="30대 초중반" />
+    <select id="c-risk" class="border rounded px-2 py-1">
+      <option value="conservative">conservative</option>
+      <option value="moderate">moderate</option>
+      <option value="aggressive">aggressive</option>
+    </select>
+  </div>
+  <button id="btn-register" class="mt-3 bg-indigo-600 text-white text-sm rounded px-3 py-1.5">고객 등록</button>
+  <p id="register-result" class="text-sm mt-2 text-slate-600"></p>
+</section>
+
+<!-- A-1 전문가 Master(JSON) 업로드 → ingest -->
+<section class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+  <h2 class="font-semibold mb-3">② 전문가 정제 Master 업로드 (JSON) → 확정 수치</h2>
+  <div class="grid grid-cols-2 gap-3 text-sm mb-2">
+    <input id="i-client" class="border rounded px-2 py-1" placeholder="client_id (숫자)" />
+    <input id="i-period" class="border rounded px-2 py-1" placeholder="회차 period (예: 2025-Q3)" value="2025-Q3" />
+  </div>
+  <textarea id="i-pl" class="w-full border rounded px-2 py-1 text-xs font-mono h-24" placeholder="pl_raw JSON (Master PL)"></textarea>
+  <textarea id="i-bs" class="w-full border rounded px-2 py-1 text-xs font-mono h-24 mt-2" placeholder="bs_raw JSON (Master BS)"></textarea>
+  <button id="btn-ingest" class="mt-3 bg-indigo-600 text-white text-sm rounded px-3 py-1.5">업로드 · 연산(compute)</button>
+  <p id="ingest-result" class="text-sm mt-2 text-slate-600"></p>
+</section>
+
+<!-- 파이프라인 시작 -->
+<section class="bg-white rounded-xl border border-slate-200 p-4">
+  <h2 class="font-semibold mb-3">③ 분석 파이프라인 시작 (Agent 1~3)</h2>
+  <div class="flex items-center gap-2 text-sm">
+    <input id="s-draft" class="border rounded px-2 py-1" placeholder="draft_id" />
+    <button id="btn-start" class="bg-emerald-600 text-white rounded px-3 py-1.5">분석 시작</button>
+    <a id="link-review" class="text-indigo-600 underline hidden" href="#">초안 검토 화면 →</a>
+  </div>
+  <p id="start-result" class="text-sm mt-2 text-slate-600"></p>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  el("btn-register").onclick = async () => {
+    try {
+      const body = {
+        name: el("c-name").value, trade_name: el("c-trade").value || undefined,
+        industry: el("c-industry").value, district_type: el("c-district").value,
+        owner_gender: el("c-gender").value, owner_age_band: el("c-ageband").value,
+        risk_appetite: el("c-risk").value,
+      };
+      const d = await apiPost("/api/clients", body);
+      el("register-result").textContent = `등록 완료 · client_id = ${d.client_id}`;
+      el("i-client").value = d.client_id;
+    } catch (e) { el("register-result").textContent = "오류: " + e.message; }
+  };
+
+  el("btn-ingest").onclick = async () => {
+    try {
+      const body = {
+        client_id: parseInt(el("i-client").value, 10),
+        period: el("i-period").value,
+        pl_raw: parseJSON(el("i-pl").value, "pl_raw"),
+        bs_raw: parseJSON(el("i-bs").value, "bs_raw"),
+      };
+      const d = await apiPost("/api/consulting/ingest", body);
+      el("ingest-result").textContent = `확정 완료 · draft_id = ${d.draft_id} (${d.status})`;
+      el("s-draft").value = d.draft_id;
+    } catch (e) { el("ingest-result").textContent = "오류: " + e.message; }
+  };
+
+  el("btn-start").onclick = async () => {
+    try {
+      const id = el("s-draft").value;
+      const d = await apiPost(`/api/consulting/${id}/start`, {});
+      el("start-result").textContent = `시작됨 (${d.status}) — 잠시 후 초안 검토 화면에서 확인`;
+      const link = el("link-review");
+      link.href = `/backoffice/draft/${id}`;
+      link.classList.remove("hidden");
+    } catch (e) { el("start-result").textContent = "오류: " + e.message; }
+  };
+});
+</script>
+{% endblock %}

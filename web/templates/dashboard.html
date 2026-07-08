@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}내 가게 대시보드{% endblock %}
+{% block body %}
+<div id="dash-empty" class="hidden text-slate-500 text-center py-16">아직 발행된 리포트가 없습니다.</div>
+
+<div id="dash">
+  <div class="mb-2">
+    <h1 id="d-name" class="text-xl font-bold">…</h1>
+    <p id="d-period" class="text-slate-500 text-sm"></p>
+  </div>
+
+  <!-- B-1 최상단 Hero KPI = BEP 달성률 + 일일 타겟 판매수량 -->
+  <section id="hero" class="grid grid-cols-2 gap-3 mb-4"></section>
+
+  <!-- 보조 KPI -->
+  <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></section>
+
+  <!-- 전후 비교(Follow-up) -->
+  <section id="followup-wrap" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+    <h2 class="font-semibold mb-2">지난 회차 권고 이행</h2>
+    <ul id="followup" class="text-sm space-y-1"></ul>
+  </section>
+</div>
+
+<script>
+const CLIENT_ID = {{ client_id }};
+
+function heroCard(k) {
+  const val = k.value_pct != null ? k.value_pct + "%" : k.value;
+  return `<div class="bg-indigo-600 text-white rounded-2xl p-5 shadow">
+    <div class="text-xs opacity-80">${k.label}</div>
+    <div class="text-3xl font-extrabold mt-1">${val}</div>
+  </div>`;
+}
+
+function kpiCard(k) {
+  const val = k.value_pct != null ? k.value_pct + "%" : k.value;
+  const unit = k.unit ? ` ${k.unit}` : "";
+  return `<div class="bg-white rounded-xl border border-slate-200 p-3">
+    <div class="text-xs text-slate-500">${k.label}</div>
+    <div class="text-lg font-bold">${val}${unit}</div>
+  </div>`;
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const d = await apiGet(`/api/dashboard/${CLIENT_ID}`);
+    el("d-name").textContent = d.client?.name || "내 가게";
+    el("d-period").textContent = d.client?.period || "";
+    el("hero").innerHTML = (d.hero_kpis || []).map(heroCard).join("");
+    el("kpis").innerHTML = (d.kpis || []).map(kpiCard).join("");
+    const items = (d.followup && d.followup.items) || [];
+    if (items.length) {
+      el("followup-wrap").classList.remove("hidden");
+      el("followup").innerHTML = items.map(it =>
+        `<li>• ${it.label} — <span class="font-medium">${it.status}</span></li>`).join("");
+    }
+  } catch (e) {
+    el("dash").classList.add("hidden");
+    el("dash-empty").classList.remove("hidden");
+    el("dash-empty").textContent = "리포트를 불러오지 못했습니다: " + e.message;
+  }
+});
+</script>
+{% endblock %}
