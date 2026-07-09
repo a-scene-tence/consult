@@ -64,7 +64,7 @@
 | `rag_contamination` | 과거 데이터 오염 — 노후·부정확·저품질 케이스가 신규 분석을 왜곡 | 오래된 벤치마크·틀린 교훈이 rag_context로 유입 | 적재 시 `outcome_label`·`embedded_at` 신선도 메타, 최소 유사도 임계값, 주기적 정리(CLAUDE.md §3.5) |
 | `similarity_mismatch` | 유사도 매칭 실패 — 무관 케이스가 매칭되어 잘못된 벤치마크 제공 | 다른 업종/재무구조 케이스가 top_k에 포함 | 업종 필터 + 비율 밴드 사전필터, 임계값 미달 시 `rag_context` 미주입(CLAUDE.md §2.4) |
 | `pii_leak` | 마스킹 실패로 PII·정확 금액이 과거 케이스/rag_context에 잔존. **위험군: 상호명(trade_name), 정확한 위치(location_raw), 정확한 성별/나이(owner_age), 고객명·사업자번호·정확 금액** | 상호명·'34세'·'역삼동' 등이 케이스 요약에 노출 | 마스킹 v2(상호명 완전 삭제, 위치→상권 밴드, 나이→연령대 밴드), 주입 전 스캔, 잔존 시 케이스 드롭·적재 중단(CLAUDE.md §3.5) |
-| `reconciliation_error` | **매출 대사 불일치** — POS 품목 매출 총합과 신고/통장 매출이 맞지 않는데 unallocated 분류 없이 진행 | 품목 합계 ≠ 총매출인데 확정 JSON 생성됨 | ingest 단계 대사 체크 → 차액은 `unallocated_cash_sales`로 강제 분류, 임계 초과 시 업로드 반려(DESIGN A-1) |
+| `reconciliation_error` | **매출 대사 불일치** — POS 품목 매출 총합과 신고/통장 매출이 맞지 않는데 unallocated 분류 없이 진행 | 품목 합계 ≠ 총매출인데 확정 JSON 생성됨 | ingest 단계 대사 체크 → 차액은 `unallocated_cash_sales`로 강제 분류, 임계 초과 시 업로드 반려(DESIGN A-1). **(Phase 9)** `compute/reconcile.py`가 파싱 초안 생성 시 Python으로 `Σ(P×Q)` vs `source_raw_sum` 대사 — 품목 매출이 원시 총합 초과 시 `reconciliation_error`(파싱 환각), 나머지 차액은 `unallocated_cash_sales`로 도출. LLM 파서(Agent 0)는 무연산이므로 이 대사가 환각 방어선이다. |
 | `division_by_zero` | 미시 연산의 0-나눗셈 — 판매수량 0, 전기 0, CL/EQUITY/월 원리금 0 등 | BEP·마진율·DSCR 계산 crash 또는 inf | compute 0-나눗셈 방어(명시 에러 또는 N/A), 경계 골든 테스트(CLAUDE.md §3.0) |
 | `followup_missing_baseline` | **직전 데이터가 없는 신규 고객**에 대한 Follow-up 분석 예외 처리 누락 | 신규 고객인데 이행 점검 서술이 생성되거나 파이프라인 에러 | `is_first_round=true` baseline 모드 분기(SPEC §1.5), 오케스트레이터 필수 체크 |
 | `category_mismatch` | **이종 상권/타겟 벤치마크 오염** — 코호트가 다른 케이스(다른 상권·성별·연령대·성향)가 RAG 벤치마크로 주입 | 오피스 상권 치킨집에 관광지 카페 교훈이 인용됨 | 코호트 메타 필터 강제 + 완화 수준 기록(CLAUDE.md §2.4), 주입 케이스 cohort_meta 검사 |

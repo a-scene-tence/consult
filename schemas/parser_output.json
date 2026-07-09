@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consult.local/schemas/parser_output.json",
+  "title": "parser_output",
+  "description": "Agent 0(데이터 엔지니어) 출력 계약 (Phase 9). 비표준 원시 데이터를 9대 표준 스키마로 파싱한 결과 + 동적 스키마 확장(schema_extensions) + 원시 총합 대사(raw_total_check). LLM 은 의미론적 매핑·정규화만 하고 사칙연산은 하지 않는다 — 집계·대사는 compute/reconcile.py 가 확정한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["info", "sales", "cogs", "opex", "wc", "inv", "debt", "od", "bs", "schema_extensions", "raw_total_check"],
+  "properties": {
+    "info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_id", "period", "business_days", "total_revenue"],
+      "properties": {
+        "client_id": { "type": "string" },
+        "period": { "type": "string" },
+        "business_days": { "type": "integer" },
+        "total_revenue": { "type": "integer", "description": "원시 데이터가 보고한 매출 총액(참고·대사용, 순수 숫자)." }
+      }
+    },
+    "sales": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_name", "selling_price", "unit_cost", "quantity"],
+        "properties": {
+          "item_name": { "type": "string" },
+          "selling_price": { "type": "integer" },
+          "unit_cost": { "type": "integer" },
+          "quantity": { "type": "integer" }
+        }
+      }
+    },
+    "cogs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["material_category", "amount"],
+        "properties": {
+          "material_category": { "type": "string" },
+          "amount": { "type": "integer" },
+          "prev_amount": { "type": "integer" }
+        }
+      }
+    },
+    "opex": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["account_name", "amount"],
+        "properties": {
+          "account_name": { "type": "string" },
+          "amount": { "type": "integer" },
+          "prev_amount": { "type": "integer" }
+        }
+      }
+    },
+    "wc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ar_days", "ap_days"],
+      "properties": {
+        "ar_days": { "type": "number" },
+        "ap_days": { "type": "number" }
+      }
+    },
+    "inv": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "amount", "days_in_inventory"],
+        "properties": {
+          "category": { "type": "string" },
+          "amount": { "type": "integer" },
+          "days_in_inventory": { "type": "number" }
+        }
+      }
+    },
+    "debt": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lender", "amount", "interest_rate", "monthly_payment"],
+        "properties": {
+          "lender": { "type": "string" },
+          "amount": { "type": "integer" },
+          "interest_rate": { "type": "number" },
+          "monthly_payment": { "type": "integer" }
+        }
+      }
+    },
+    "od": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suspense_receipts", "suspense_payments"],
+      "properties": {
+        "suspense_receipts": { "type": "integer" },
+        "suspense_payments": { "type": "integer" }
+      }
+    },
+    "bs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_cash", "total_ca", "total_cl", "total_equity"],
+      "properties": {
+        "total_cash": { "type": "integer" },
+        "total_ca": { "type": "integer" },
+        "total_cl": { "type": "integer" },
+        "total_equity": { "type": "integer" }
+      }
+    },
+    "schema_extensions": {
+      "type": "array",
+      "description": "9대 표준에 매핑되지 않는 비즈니스 크리티컬 데이터. 누락 금지 — 전문가 판단 대상(compute 자동 주입 금지).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_sheet", "generated_key", "korean_name", "value"],
+        "properties": {
+          "target_sheet": { "type": "string", "description": "대상 영역(COGS/OPEX/Sales/BS 등)." },
+          "generated_key": { "type": "string", "description": "스스로 생성한 snake_case 영어 키." },
+          "korean_name": { "type": "string" },
+          "value": { "description": "추출 값(숫자 또는 문자열)." }
+        }
+      }
+    },
+    "raw_total_check": {
+      "type": "object",
+      "description": "원시 총합 대사용 원천 수치. Python 리컨실러가 집계 총합과 대조한다.",
+      "additionalProperties": false,
+      "required": ["source_raw_sum"],
+      "properties": {
+        "source_raw_sum": { "type": "integer", "description": "로데이터에서 포착한 원시(가공 전) 매출/매입 총액." }
+      }
+    }
+  }
+}

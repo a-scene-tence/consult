@@ -15,7 +15,8 @@
 2. **역할 경계 준수.** 각 에이전트는 `SPEC.md §2`에 정의된 책임 범위 밖을 판단하지 않는다.
 3. **인간 피드백 최우선.** `expert_feedback`가 있으면 Agent 4는 초안보다 피드백을 우선 반영한다.
 4. **문서 우선(Docs-first).** 코드 수정 전에 관련 MD 문서(SPEC/DESIGN)를 먼저 최신화한다. 승인 없이 코드 착수 금지.
-5. **전문가 게이트(P5).** 시스템에 유입되는 수치는 전문가가 정제한 표준화 Master 양식을 통해서만 들어온다. 원시 데이터를 직접 파이프라인에 넣는 코드를 만들지 않는다.
+5. **전문가 게이트(P5).** 시스템에 유입되는 수치는 전문가가 정제한 표준화 Master 양식을 통해서만 들어온다. 원시 데이터를 직접(사람 검토 없이) compute 파이프라인에 넣는 코드를 만들지 않는다.
+   - **(Phase 9) P5 자동 표준화 보조(assist).** LLM 데이터 엔지니어(Agent 0, `agents/data_engineer.py`)가 비표준 원시 데이터를 9대 표준 스키마로 파싱해 **표준화 Master 초안**을 만들 수 있다. 단 이 초안은 **전문가가 검토·보완·승인한 뒤에만** `POST /api/consulting/ingest`로 유입된다 — 사람이 최종 게이트임은 불변. Agent 0도 **무연산**(의미론적 매핑·정규화·동적 스키마 확장만)이며, 집계·총합 대사는 `compute/reconcile.py`가 Python으로 확정한다. 파싱 방어선은 `numeric_guard`가 아니라 **reconciliation**(원시 총합 대조, 불일치 시 `reconciliation_error`)이다. 표준 밖 데이터는 `schema_extensions`에 격리 보존하고 compute에 자동 주입하지 않는다.
 
 ---
 
@@ -188,9 +189,11 @@ consult/
 │   ├── ingest.py                # Master 엑셀/CSV → 정형화 (P5 게이트 산출물만 수용)
 │   ├── compute_pl.py            # P*Q·BEP 포함
 │   ├── compute_bs.py            # CCC·DSCR·Runway·세무 이벤트 포함
-│   └── tax_calendar.py          # 정적 세무 캘린더 (신규)
+│   ├── tax_calendar.py          # 정적 세무 캘린더 (신규)
+│   └── reconcile.py             # (Phase 9) parser_output → Master 초안 + 총합 대사(Python 집계)
 ├── agents/                      # LLM 레이어 (무연산)
 │   ├── base.py / pl_analyst.py / bs_analyst.py / report_master.py / final_publisher.py
+│   └── data_engineer.py         # (Phase 9) Agent 0 — 원시 데이터 → 9대 표준 스키마 파싱(P5 보조)
 ├── rag/
 │   ├── chroma_client.py         # 코호트 메타 필터 조회
 │   ├── masking.py               # 마스킹 v2 (§3.5)

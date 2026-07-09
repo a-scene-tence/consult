@@ -43,6 +43,7 @@ def create_app(
     session_factory: Any | None = None,
     make_orchestrator: Callable[[Any], Any] | None = None,
     case_store: Any | None = None,
+    parse_fn: Callable[..., Any] | None = None,
 ) -> FastAPI:
     """FastAPI 앱 생성. 미주입 시 운영 기본값(실제 Agent + DATABASE_URL)을 사용한다."""
     session_factory = session_factory or _default_session_factory()
@@ -50,12 +51,17 @@ def create_app(
         from web.production import make_prod_orchestrator
 
         make_orchestrator = make_prod_orchestrator  # 실 Agent + celery-aware 적재 훅
+    if parse_fn is None:
+        from agents.data_engineer import parse_raw
+
+        parse_fn = parse_raw  # Agent 0(데이터 엔지니어) — 원시→표준화 초안 파싱
 
     configure_logging()  # 구조적 로깅(cid/did) 포맷 설치
 
     app = FastAPI(title="consult — 영세사업자 재무 컨설팅")
     app.state.session_factory = session_factory
     app.state.make_orchestrator = make_orchestrator
+    app.state.parse_fn = parse_fn
 
     # CORS — 프론트 도메인 허용(ALLOWED_ORIGINS). '*'이면 credentials 비활성(스펙 준수).
     origins = _allowed_origins()

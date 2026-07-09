@@ -24,6 +24,12 @@ router = APIRouter(
 )
 
 
+class ParseIn(BaseModel):
+    client_id: str
+    period: str
+    raw_text: str
+
+
 class IngestIn(BaseModel):
     client_id: int
     period: str
@@ -50,6 +56,22 @@ def _store_from(app: Any):
     from orchestrator import SqlAlchemyStore
 
     return SqlAlchemyStore(app.state.session_factory)
+
+
+@router.post("/parse")
+@limiter.limit(STRICT_RATE_LIMIT)  # LLM(데이터 엔지니어) 유발 — 엄격 제한
+def parse(body: ParseIn, request: Request) -> dict[str, Any]:
+    """P5 보조: 비표준 원시 데이터 → 표준화 Master **초안** + 대사 리포트(전문가 검토용).
+
+    compute 로 유입하지 않는다 — 전문가가 초안을 검토·보완·승인한 뒤 `/ingest` 로만 유입된다(§0.5).
+    """
+    from compute.reconcile import build_draft_master
+
+    parser_output = request.app.state.parse_fn(
+        body.raw_text, client_id=body.client_id, period=body.period
+    )
+    draft = build_draft_master(parser_output)
+    return {"parser_output": parser_output, **draft}
 
 
 @router.post("/ingest", status_code=201)
