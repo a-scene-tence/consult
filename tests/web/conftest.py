@@ -79,6 +79,11 @@ def _build_client():
     from web.auth import seed_default_users
 
     seed_default_users(session_factory)  # admin / owner(client_id=1) 시드
+    # Rate limiter 는 테스트 간 카운터가 누적되므로 기본 비활성(전용 테스트에서만 켠다).
+    from web.ratelimit import limiter
+
+    limiter.enabled = False
+    limiter.reset()
     case_store = InMemoryCaseStore()
 
     def make_orchestrator(store):

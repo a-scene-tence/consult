@@ -14,8 +14,19 @@ from __future__ import annotations
 import os
 
 from celery import Celery
+from celery.signals import after_setup_logger, after_setup_task_logger
+
+from web.logging_config import configure_logging
 
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
 
 celery_app = Celery(
     "consult",
@@ -32,4 +43,18 @@ celery_app.conf.update(
     task_eager_propagates=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # 시한폭탄 방어 — Opus 응답 지연 대비 soft/hard 타임아웃(초).
+    task_soft_time_limit=_int_env("CELERY_TASK_SOFT_TIME_LIMIT", 600),
+    task_time_limit=_int_env("CELERY_TASK_TIME_LIMIT", 660),
 )
+
+
+# 워커 로그에도 구조적 로깅(cid/did) 포맷 적용.
+@after_setup_logger.connect
+def _setup_logger(**_kwargs) -> None:  # pragma: no cover - 워커 런타임
+    configure_logging()
+
+
+@after_setup_task_logger.connect
+def _setup_task_logger(**_kwargs) -> None:  # pragma: no cover - 워커 런타임
+    configure_logging()

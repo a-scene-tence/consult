@@ -23,6 +23,25 @@ def test_task_backend_toggle(monkeypatch):
     assert use_celery() is True
 
 
+def test_tasks_have_backoff_retry_policy():
+    """전이성 Anthropic 오류에 대해 지수 백오프 재시도가 설정됐는지(브로커 불필요)."""
+    import anthropic
+
+    for name in ("run_analysis_task", "submit_feedback_task", "index_case_task"):
+        task = getattr(web.tasks, name)
+        assert task.retry_backoff is True
+        assert task.max_retries >= 1
+        assert anthropic.RateLimitError in task.autoretry_for      # 429
+        assert anthropic.InternalServerError in task.autoretry_for  # 50x
+        # 결정적 오류는 재시도 대상에서 제외되어야 한다.
+        assert ValueError not in task.autoretry_for
+
+
+def test_task_time_limits_configured():
+    assert celery_app.conf.task_soft_time_limit and celery_app.conf.task_time_limit
+    assert celery_app.conf.task_time_limit >= celery_app.conf.task_soft_time_limit
+
+
 def test_index_fn_enqueues_when_celery(monkeypatch):
     """prod_index_fn 이 celery 모드에서 index_case_task 를 큐잉하는지(브로커 미연결 대체)."""
     monkeypatch.setenv("TASK_BACKEND", "celery")

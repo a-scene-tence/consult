@@ -33,6 +33,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
       LLM_MODEL: ${LLM_MODEL:-claude-opus-4-8}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      RATE_LIMIT_ENABLED: "1"
+      DEFAULT_RATE_LIMIT: ${DEFAULT_RATE_LIMIT:-200/minute}
+      STRICT_RATE_LIMIT: ${STRICT_RATE_LIMIT:-5/minute}
       RUN_MIGRATIONS: "1"   # 웹 컨테이너가 마이그레이션 수행
       SEED_USERS: "1"       # 데모 계정 시드(운영은 0)
     depends_on:
@@ -53,6 +57,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
       LLM_MODEL: ${LLM_MODEL:-claude-opus-4-8}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-600}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-660}
+      CELERY_MAX_RETRIES: ${CELERY_MAX_RETRIES:-3}
       RUN_MIGRATIONS: "0"   # 워커는 마이그레이션 미수행(웹이 담당)
     depends_on:
       db:
@@ -61,6 +68,19 @@ services:
         condition: service_healthy
       web:
         condition: service_started
+
+  # Celery 모니터링 대시보드 (http://localhost:5555)
+  flower:
+    build: .
+    entrypoint: []            # DB 마이그레이션 훅 우회(모니터링 전용)
+    command: ["celery", "-A", "web.celery_app", "flower", "--port=5555"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # 선택: RAG(ChromaDB). 활성화: docker-compose --profile rag up
   chroma:

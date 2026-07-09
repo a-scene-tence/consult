@@ -6,16 +6,22 @@ fake 에이전트 + SQLite + InMemoryCaseStore 를 주입해 실제 Claude 호�
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from orchestrator import IllegalTransition
 from web.api import auth, clients, consulting, dashboard
+from web.logging_config import configure_logging
+from web.ratelimit import limiter
 
 _WEB_DIR = Path(__file__).resolve().parent
 _TEMPLATES = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -25,6 +31,11 @@ def _default_session_factory() -> Any:
     from db.session import make_engine, make_session_factory
 
     return make_session_factory(make_engine())
+
+
+def _allowed_origins() -> list[str]:
+    raw = os.environ.get("ALLOWED_ORIGINS", "*")
+    return [o.strip() for o in raw.split(",") if o.strip()] or ["*"]
 
 
 def create_app(
@@ -40,9 +51,32 @@ def create_app(
 
         make_orchestrator = make_prod_orchestrator  # 실 Agent + celery-aware 적재 훅
 
+    configure_logging()  # 구조적 로깅(cid/did) 포맷 설치
+
     app = FastAPI(title="consult — 영세사업자 재무 컨설팅")
     app.state.session_factory = session_factory
     app.state.make_orchestrator = make_orchestrator
+
+    # CORS — 프론트 도메인 허용(ALLOWED_ORIGINS). '*'이면 credentials 비활성(스펙 준수).
+    origins = _allowed_origins()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=("*" not in origins),
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Rate Limit — slowapi(전역 기본 + 라우트별 엄격 제한). 초과 시 429.
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def _rate_limited(_: Request, exc: RateLimitExceeded) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"요청 한도를 초과했습니다({exc.detail}). 잠시 후 다시 시도하세요."},
+        )
 
     # 예외 → HTTP 상태 매핑.
     @app.exception_handler(IllegalTransition)

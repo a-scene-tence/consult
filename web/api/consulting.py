@@ -15,6 +15,7 @@ from web.api import (
     require_draft,
 )
 from web.auth import require_admin
+from web.ratelimit import STRICT_RATE_LIMIT, limiter
 from web.services import get_draft_view, ingest_financials, record_feedback
 
 # 컨설팅 파이프라인은 전부 관리자(전문가) 전용.
@@ -61,6 +62,7 @@ def ingest(body: IngestIn, request: Request) -> dict[str, Any]:
 
 
 @router.post("/{draft_id}/start", status_code=202)
+@limiter.limit(STRICT_RATE_LIMIT)  # LLM 유발 — 엄격 제한(요금 폭탄 방어)
 def start(draft_id: int, request: Request, background: BackgroundTasks) -> dict[str, Any]:
     """Agent 1~3 파이프라인을 백그라운드로 구동(computed→…→review_pending)."""
     store = get_store(request)
@@ -87,6 +89,7 @@ def get_draft(draft_id: int, request: Request) -> dict[str, Any]:
 
 
 @router.post("/{draft_id}/feedback", status_code=202)
+@limiter.limit(STRICT_RATE_LIMIT)  # LLM(Agent 4) 유발 — 엄격 제한
 def feedback(
     draft_id: int, body: FeedbackIn, request: Request, background: BackgroundTasks
 ) -> dict[str, Any]:

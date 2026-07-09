@@ -25,6 +25,8 @@ dependencies = [
     "passlib[bcrypt]>=1.7",
     "bcrypt<4.1",
     "python-multipart>=0.0.9",
+    "slowapi>=0.1.9",
+    "flower>=2.0",
 ]
 
 [project.optional-dependencies]
