@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Consult AI Workspace — 새 리포트 발행</title>
+
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome (아이콘) -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  />
+  <script>
+    // 브랜드 컬러 토큰
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: { 600: "#4f46e5", 700: "#4338ca" } },
+          fontFamily: { sans: ["Pretendard", "system-ui", "-apple-system", "sans-serif"] },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { -webkit-font-smoothing: antialiased; }
+    /* 사이드바 활성 메뉴 좌측 강조바 */
+    .nav-active { position: relative; }
+    .nav-active::before {
+      content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+      width: 3px; border-radius: 9999px; background: #818cf8;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div class="flex min-h-screen">
+    <!-- ============ 좌측 사이드바 (LNB) ============ -->
+    <aside class="hidden md:flex w-64 shrink-0 flex-col bg-slate-900 text-slate-300">
+      <!-- 로고 -->
+      <div class="flex items-center gap-3 px-5 h-16 border-b border-slate-800">
+        <span class="grid place-items-center w-9 h-9 rounded-lg bg-brand-600 text-white">
+          <i class="fa-solid fa-brain"></i>
+        </span>
+        <div class="leading-tight">
+          <p class="text-white font-bold text-sm">Consult AI</p>
+          <p class="text-slate-400 text-xs">Workspace</p>
+        </div>
+      </div>
+
+      <!-- 메뉴 -->
+      <nav class="flex-1 px-3 py-4 space-y-1 text-sm">
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/70 hover:text-white transition">
+          <i class="fa-solid fa-chart-line w-5 text-center text-slate-400"></i> 대시보드
+        </a>
+        <!-- 현재 활성화 -->
+        <a href="#" class="nav-active flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-800 text-white font-medium">
+          <i class="fa-solid fa-file-circle-plus w-5 text-center text-indigo-300"></i> 새 리포트 발행
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/70 hover:text-white transition">
+          <i class="fa-solid fa-users w-5 text-center text-slate-400"></i> 고객 DB 관리
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/70 hover:text-white transition">
+          <i class="fa-solid fa-gear w-5 text-center text-slate-400"></i> 설정
+        </a>
+      </nav>
+
+      <!-- 하단 프로필 -->
+      <div class="px-3 py-4 border-t border-slate-800">
+        <div class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-800/60">
+          <span class="grid place-items-center w-9 h-9 rounded-full bg-slate-700 text-white text-sm font-semibold">김</span>
+          <div class="flex-1 leading-tight">
+            <p class="text-white text-sm font-medium">김세무 파트너</p>
+            <p class="text-slate-400 text-xs">Admin · 세무회계</p>
+          </div>
+          <button title="로그아웃" class="text-slate-400 hover:text-white transition">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ 우측 메인 작업 영역 ============ -->
+    <div class="flex-1 min-w-0 flex flex-col">
+      <!-- 상단 헤더 -->
+      <header class="h-16 shrink-0 bg-white border-b border-slate-200 flex items-center justify-between px-6">
+        <div>
+          <p class="text-xs text-slate-400">새 리포트 발행 · P5 데이터 파이프라인</p>
+          <h1 class="text-lg font-bold text-slate-900">원시 데이터 정제 & 최종 승인</h1>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            <i class="fa-solid fa-hourglass-half"></i> 검증 대기
+          </span>
+        </div>
+      </header>
+
+      <main class="flex-1 overflow-y-auto p-6 space-y-6 max-w-5xl w-full mx-auto">
+
+        <!-- ===== 진행 스텝 인디케이터 ===== -->
+        <ol class="flex items-center w-full text-xs font-medium text-slate-500">
+          <li class="flex items-center text-brand-700">
+            <span class="grid place-items-center w-6 h-6 rounded-full bg-brand-600 text-white mr-2">1</span> 원시 입력
+            <span class="flex-1 h-px bg-slate-200 mx-3"></span>
+          </li>
+          <li class="flex items-center text-brand-700">
+            <span class="grid place-items-center w-6 h-6 rounded-full bg-brand-600 text-white mr-2">2</span> 대사 검증
+            <span class="flex-1 h-px bg-slate-200 mx-3"></span>
+          </li>
+          <li class="flex items-center">
+            <span class="grid place-items-center w-6 h-6 rounded-full bg-slate-200 text-slate-600 mr-2">3</span> 최종 승인
+          </li>
+        </ol>
+
+        <!-- ============ Panel A. Step 1 원시 데이터 입력 ============ -->
+        <!-- API 연결: POST /api/consulting/parse  {client_id, period, raw_text} -->
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+            <span class="grid place-items-center w-8 h-8 rounded-lg bg-brand-600/10 text-brand-700">
+              <i class="fa-solid fa-file-import"></i>
+            </span>
+            <div>
+              <h2 class="font-bold text-slate-900">Step 1 · 비표준 로데이터(Raw Data) 자동 파싱</h2>
+              <p class="text-xs text-slate-500">POS 결제·지출 내역 텍스트를 붙여넣으면 Agent 0가 9대 표준 스키마로 정규화합니다.</p>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <div class="grid sm:grid-cols-2 gap-4">
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">고객 선택</span>
+                <select class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600">
+                  <option>C-1001 · 홍길동치킨</option>
+                  <option>C-1002 · 역삼분식</option>
+                  <option>C-1003 · 오피스카페</option>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">분석 기간</span>
+                <input type="text" value="2025-Q3"
+                  class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                  placeholder="예: 2025-Q3" />
+              </label>
+            </div>
+
+            <label class="block">
+              <span class="text-sm font-medium text-slate-700">원시 데이터 (Raw Data)</span>
+              <textarea rows="7"
+                class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                placeholder="예)&#10;07/01 후라이드치킨(반반) 18,000원 x 3건&#10;07/01 콜라(병) 2,000원 x 5건&#10;배달의민족 정산 배달수수료 8,200,000원 차감&#10;세금계산서 생닭 매입 41,000,000원&#10;소상공인 방역지원금 2,000,000원 입금"></textarea>
+            </label>
+
+            <div class="flex justify-end">
+              <button onclick="document.getElementById('panelB').scrollIntoView({behavior:'smooth'})"
+                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm transition">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Agent 0 파싱 및 오차 검증 시작
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ Panel B. Step 2 대사 검증 보드 ============ -->
+        <!-- 데이터 매핑: reconciliation.source_raw_sum / item_revenue / unallocated_cash_sales, schema_extensions[] -->
+        <section id="panelB" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden scroll-mt-6">
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+            <span class="grid place-items-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600">
+              <i class="fa-solid fa-scale-balanced"></i>
+            </span>
+            <div>
+              <h2 class="font-bold text-slate-900">Step 2 · 데이터 대사 및 매핑 결과</h2>
+              <p class="text-xs text-slate-500">Python 리컨실러가 통장 총액과 POS 합산을 대조합니다. 차액은 즉시 강조됩니다.</p>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-6">
+            <!-- KPI 위젯 3개 -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <!-- ① 통장 총매출 (source_raw_sum) -->
+              <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-solid fa-building-columns"></i> 통장 총매출액</p>
+                <p class="mt-2 text-2xl font-extrabold text-slate-800 tabular-nums">130,000,000<span class="text-sm font-medium text-slate-400 ml-1">원</span></p>
+                <p class="text-xs text-slate-400 mt-1">source_raw_sum</p>
+              </div>
+              <!-- ② POS 합산 (item_revenue) -->
+              <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-solid fa-cash-register"></i> POS 합산 매출</p>
+                <p class="mt-2 text-2xl font-extrabold text-slate-800 tabular-nums">120,500,000<span class="text-sm font-medium text-slate-400 ml-1">원</span></p>
+                <p class="text-xs text-slate-400 mt-1">Σ(단가 × 수량)</p>
+              </div>
+              <!-- ③ 미분류 차액 (Variance) — 오차 강조(붉은색 + 경고 아이콘) -->
+              <div class="rounded-xl border-2 border-red-300 bg-red-50 p-4">
+                <p class="text-xs text-red-600 font-semibold flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation"></i> 미분류 차액 (Variance)
+                </p>
+                <p class="mt-2 text-2xl font-extrabold text-red-600 tabular-nums">9,500,000<span class="text-sm font-medium text-red-400 ml-1">원</span></p>
+                <p class="text-xs text-red-500 mt-1">unallocated_cash_sales · 현금매출 누락 추정</p>
+              </div>
+            </div>
+
+            <!-- 오차 경고 배너 -->
+            <div class="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+              <p><strong>대사 불일치(reconciliation_error) 감지.</strong> 통장 총매출과 POS 합산의 차액 9,500,000원이 품목에 매칭되지 않았습니다. 미분류 현금매출로 분류하거나 원시 데이터를 재검토하세요.</p>
+            </div>
+
+            <!-- 신규 확장 스키마 테이블 (schema_extensions[]) -->
+            <div>
+              <h3 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-diagram-project text-slate-400"></i> Agent 0 신규 확장 스키마 (동적 매핑)
+              </h3>
+              <div class="overflow-x-auto rounded-lg border border-slate-200">
+                <table class="min-w-full text-sm">
+                  <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+                    <tr>
+                      <th class="text-left font-medium px-4 py-2.5">Generated Key</th>
+                      <th class="text-left font-medium px-4 py-2.5">한글 명칭</th>
+                      <th class="text-left font-medium px-4 py-2.5">대상 시트</th>
+                      <th class="text-right font-medium px-4 py-2.5">값</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr class="hover:bg-slate-50">
+                      <td class="px-4 py-3 font-mono text-brand-700">government_subsidy</td>
+                      <td class="px-4 py-3 text-slate-700">소상공인 방역지원금</td>
+                      <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">OPEX</span></td>
+                      <td class="px-4 py-3 text-right tabular-nums font-medium text-slate-800">2,000,000 원</td>
+                    </tr>
+                    <tr class="hover:bg-slate-50">
+                      <td class="px-4 py-3 font-mono text-brand-700">delivery_platform_fee</td>
+                      <td class="px-4 py-3 text-slate-700">배달앱 정산 수수료</td>
+                      <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">OPEX</span></td>
+                      <td class="px-4 py-3 text-right tabular-nums font-medium text-slate-800">8,200,000 원</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-xs text-slate-400 mt-2">
+                <i class="fa-solid fa-circle-info"></i>
+                확장 스키마는 표준 9대 항목에 없는 데이터로, 전문가 승인 전까지 연산에 자동 반영되지 않습니다.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ Panel C. Step 3 §0.5 최종 승인 게이트 (HITL) ============ -->
+        <!-- 승인 시: 확정 초안을 POST /api/consulting/ingest → compute 가동 -->
+        <section class="bg-white rounded-xl shadow-md border-2 border-brand-500 overflow-hidden ring-4 ring-brand-500/10">
+          <div class="px-6 py-4 border-b border-brand-100 bg-brand-600/5 flex items-center gap-3">
+            <span class="grid place-items-center w-8 h-8 rounded-lg bg-brand-600 text-white">
+              <i class="fa-solid fa-shield-halved"></i>
+            </span>
+            <div>
+              <h2 class="font-bold text-slate-900">Step 3 · 전문가 최종 검수 및 연산 엔진 이관 <span class="text-brand-700 text-sm">(§0.5 HITL 게이트)</span></h2>
+              <p class="text-xs text-slate-500">사람이 최종 게이트입니다. 승인해야만 확정 수치가 분석 엔진(Agent 1~4)으로 넘어갑니다.</p>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <label class="block">
+              <span class="text-sm font-medium text-slate-700">검토 의견</span>
+              <textarea rows="3"
+                class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                placeholder="예) POS 데이터 오차 없음. 미분류 차액은 현금매출로 분류 확인. 방역지원금 확장 키 승인함."></textarea>
+            </label>
+
+            <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-2">
+              <label class="block sm:max-w-xs w-full">
+                <span class="text-sm font-medium text-slate-700">전자 서명</span>
+                <div class="mt-1.5 relative">
+                  <i class="fa-solid fa-signature absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input type="text"
+                    class="w-full rounded-lg border-slate-300 border pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                    placeholder="검수자 성명을 입력하세요" />
+                </div>
+              </label>
+
+              <button
+                class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-lg shadow-emerald-600/20 transition w-full sm:w-auto">
+                <i class="fa-solid fa-circle-check"></i> 최종 승인 및 리포트 분석 가동
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <p class="text-center text-xs text-slate-400 pt-2 pb-6">
+          Consult AI Workspace · P5 전문가 게이트 준수 · Agent 0 → Reconciliation → HITL
+        </p>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
