@@ -38,11 +38,22 @@ _SCHEMA_GUIDE = """[9대 표준 관리회계 스키마 가이드]
 그 외 표준에 매핑되지 않는 비즈니스 크리티컬 데이터는 schema_extensions[] 에 격리(누락 금지).
 raw_total_check.source_raw_sum 에는 원시(가공 전) 매출/매입 총액을 그대로 담아 대사에 쓴다."""
 
-# 사용자 제시 시스템 프롬프트(3대 규칙: 의미론적 매핑·동적 스키마 확장·대사).
-_SYSTEM = (
+# 승인 메모리 미주입 시 <approved_memory> 자리표시자.
+_NO_MEMORY = "(승인된 매핑 없음 — 아래 1~3 규칙으로 신규 추론하라)"
+
+# 사용자 제시 시스템 프롬프트 v1.1 — Rule #0(승인 매핑 강제 재사용) + 기존 3대 규칙.
+# `{injected_memory}` 는 parse_raw 가 전역+고객 승인 메모리(JSON)를 주입한다(빈 값이면 _NO_MEMORY).
+_SYSTEM_TEMPLATE = (
     "당신은 비표준화된 소상공인 원시 데이터(POS 영수증 타임라인, 배달 정산 내역 텍스트, 국세청 매입 "
     "세금계산서)를 파싱하여, 시스템의 [9대 표준 관리회계 스키마]로 변환하는 오차 제로(0%)의 수석 데이터 "
-    "엔지니어이자 관리회계 전문가입니다. 다음 3대 규칙을 엄격히 준수해 구조화된 JSON 만 반환합니다.\n\n"
+    "엔지니어이자 관리회계 전문가입니다. 다음 규칙을 엄격히 준수해 구조화된 JSON 만 반환합니다.\n\n"
+    "### 0. 승인된 매핑 강제 적용 (최우선 규칙 — Rule #0)\n"
+    "- 아래 <approved_memory> 는 전문가가 이미 검토·승인한 '원시 텍스트 → 표준 Key/시트' 매핑이다. "
+    "원시 데이터에서 이와 동일하거나 의미상 명백히 일치하는 항목을 만나면 **반드시 이 매핑을 그대로 "
+    "재사용**하라(standard_key 를 해당 시트의 식별자 필드로, target_sheet 를 대상 블록으로). 새로 "
+    "추론하거나 다른 Key 로 바꾸지 마라 — 회차 간 일관성을 위한 결정적 규칙이다.\n"
+    "- 승인 메모리에 없는 항목만 아래 1~3 규칙으로 신규 추론하라.\n"
+    "<approved_memory>\n{injected_memory}\n</approved_memory>\n\n"
     "### 1. 의미론적 매핑 및 정규화\n"
     "- 중구난방 텍스트 명칭을 표준 식별자로 변환하라(예: '후라이드치킨(반반) 무추가'→item_name '후라이드치킨'; "
     "'건물주 이순신 월세 입금'→account_name '임차료').\n"
@@ -57,6 +68,16 @@ _SYSTEM = (
     "원시 총합의 원천 수치를 담아 대사가 가능하게 하라.\n\n"
     + _SCHEMA_GUIDE
 )
+
+
+def _build_system(approved_memory: list[dict[str, Any]] | None) -> str:
+    """승인 메모리(전역+고객)를 <approved_memory> 블록에 주입한 v1.1 시스템 프롬프트를 만든다."""
+    if approved_memory:
+        injected = json.dumps(approved_memory, ensure_ascii=False, indent=2)
+    else:
+        injected = _NO_MEMORY
+    # .replace 사용(.format 금지) — _SCHEMA_GUIDE 의 리터럴 중괄호와 충돌 방지.
+    return _SYSTEM_TEMPLATE.replace("{injected_memory}", injected)
 
 
 def _build_user_message(raw_text: str, client_id: str, period: str) -> str:
@@ -75,20 +96,25 @@ def parse_raw(
     *,
     client_id: str,
     period: str,
+    approved_memory: list[dict[str, Any]] | None = None,
     client: Any | None = None,
 ) -> dict[str, Any]:
     """원시 데이터 텍스트를 parser_output(표준화 Master 초안)으로 파싱한다.
+
+    `approved_memory` 는 전문가가 승인한 '원시→표준 Key/시트' 매핑(전역+해당 고객)이다. v1.1
+    Rule #0 에 따라 시스템 프롬프트의 <approved_memory> 로 주입돼 동일 매핑을 강제 재사용한다.
 
     Raises:
         ValueError: 자가치유 재시도 후에도 출력이 parser_output 스키마를 위반할 때.
     """
     user = _build_user_message(raw_text, client_id, period)
+    system = _build_system(approved_memory)
 
     def _validate(output: dict[str, Any]) -> None:
         validate_payload(output, _SCHEMA_NAME)  # 스키마 위반 → ValueError (자가치유 재시도)
 
     return self_healing_call(
-        system=_SYSTEM,
+        system=system,
         user=user,
         tool_name=_TOOL_NAME,
         tool_description="비표준 원시 데이터를 9대 표준 스키마로 파싱한 결과를 제출한다.",

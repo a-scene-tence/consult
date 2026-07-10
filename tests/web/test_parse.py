@@ -24,7 +24,7 @@ from tests.web.conftest import (
 from web.app import create_app
 
 
-def _fake_parse(raw_text, *, client_id, period):
+def _fake_parse(raw_text, *, client_id, period, approved_memory=None):
     sales = [{"item_name": "후라이드치킨", "selling_price": 18000, "unit_cost": 7200, "quantity": 3900}]
     rev = 18000 * 3900
     return {

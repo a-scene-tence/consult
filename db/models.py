@@ -69,6 +69,12 @@ RISK_APPETITES: tuple[str, ...] = ("conservative", "moderate", "aggressive")
 # --- Phase 7: 인증 사용자 역할 ---
 USER_ROLES: tuple[str, ...] = ("admin", "client")
 
+# --- Phase 10: Agent 0 승인 메모리(학습형 매핑)가 지목 가능한 대상 시트 화이트리스트 ---
+# 9대 표준 블록 + 동적 확장 격리 영역. 그 밖의 값은 저장 거부(오염 방지, CLAUDE.md §0.5).
+PARSING_TARGET_SHEETS: tuple[str, ...] = (
+    "sales", "cogs", "opex", "wc", "inv", "debt", "od", "bs", "schema_extensions",
+)
+
 # --- v0.3 recommendations enum (SPEC §3.2) ---
 # 권고 목표 방향.
 RECOMMENDATION_DIRECTIONS: tuple[str, ...] = ("increase", "decrease", "maintain")
@@ -321,6 +327,39 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     # client 역할이 바인딩되는 고객 id(느슨 참조 — FK 미설정, 시드 편의).
     client_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ParsingMemory(Base):
+    """Agent 0(데이터 엔지니어) 전문가 승인 매핑 메모리 (Phase 10, CLAUDE.md §0.5).
+
+    전문가가 승인한 '원시 텍스트 → 표준 Key/시트' 매핑을 영속화한다. 다음 파싱부터 Agent 0의
+    시스템 프롬프트에 `<approved_memory>` 로 주입돼 **Rule #0(승인 매핑 강제 재사용)**으로 동일
+    매핑을 결정적으로 재현한다 — 회차 간 매핑 드리프트·환각 억제(일관성 락).
+
+    `client_id`(파싱 시 쓰는 문자열 라벨)가 NULL 이면 전역(공통) 매핑, 값이 있으면 해당 고객
+    특수 매핑이다. 파싱 시 전역 + 해당 고객 메모리를 합쳐 주입한다. `target_sheet` 는 9대 표준
+    블록 또는 schema_extensions 로 제한(CHECK)해 오염을 방지한다(승인분만 신뢰 주입).
+    """
+
+    __tablename__ = "parsing_memory"
+    __table_args__ = (
+        UniqueConstraint("client_id", "raw_text", name="uq_parsing_memory_key"),
+        CheckConstraint(
+            _in_clause("target_sheet", PARSING_TARGET_SHEETS),
+            name="ck_parsing_memory_target_sheet",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # NULL=전역
+    raw_text: Mapped[str] = mapped_column(String(255), nullable=False)  # 원시 명칭/패턴
+    standard_key: Mapped[str] = mapped_column(String(128), nullable=False)  # 표준 Key
+    target_sheet: Mapped[str] = mapped_column(String(32), nullable=False)  # 대상 블록
+    korean_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approved_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

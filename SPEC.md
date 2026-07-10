@@ -84,6 +84,7 @@ flowchart TD
 0. **[관리자] 고객 프로필 등록(CRM)** — 신규 고객 등록 시 백오피스에 **필수 프로필**(상호, 업종, 상권 유형, 대표자 성별, 연령대, 리스크 수용 성향 등, §2.6 `client_profile`)을 등록한다.
 1. **[관리자] 원시 데이터 수령 → 전문가 정제 → Master 업로드** — 고객은 POS·통장내역 등 원시 데이터만 제공. 전문가가 교차 대조(매출 대사 등)하여 **표준화 Master 엑셀/CSV 양식**으로 정제해 백오피스에 업로드(P5).
    - **(Phase 9) P5 자동 표준화 보조:** 전문가는 `POST /api/consulting/parse`로 비표준 원시 데이터(POS 타임라인·배달 정산·세금계산서 텍스트)를 **LLM 데이터 엔지니어(Agent 0)**에 넣어 **표준화 Master 초안** + 대사 리포트(reconciliation)를 받는다. Agent 0은 무연산(의미론적 매핑·정규화·동적 스키마 확장만)이고, 집계·총합 대사는 `compute/reconcile.py`가 Python으로 확정한다. **초안은 전문가 검토·보완·승인 후에만** `/ingest`로 유입된다 — 사람이 최종 게이트(§0.5 불변). 표준 밖 데이터는 `schema_extensions`에 격리 보존.
+   - **(Phase 10) 승인 매핑 메모리(학습형, Rule #0):** 전문가가 승인한 '원시 텍스트 → 표준 Key/시트' 매핑을 `POST /api/consulting/parse/memory`로 저장하면 `parsing_memory`에 영속화되고, 이후 `/parse` 시 **전역(공통) + 해당 고객** 매핑이 Agent 0 프롬프트(`<approved_memory>`)에 주입돼 **강제 재사용**된다(회차 간 매핑 일관성·환각 억제). 승인분만 신뢰 주입하며 `target_sheet` 화이트리스트로 오염을 차단한다(위반 400).
 2. **[시스템] 확정 수치 연산** — compute 레이어가 품목별 P*Q 마진, 공헌이익, BEP(매출액·일일 타겟 판매수량), 판관비 증가 Top3, CCC, DSCR, Cash Runway, 세무 캘린더 이벤트까지 **의무 사전 계산**(`CLAUDE.md §3.0`)하여 `financials.pl`/`financials.bs` 확정.
 3. **[Agent 1 — PL 분석가]** — `rag_context`(코호트 조회) + `client_profile` + `followup_context` 주입 후: 품목 마진 구조(P*Q)·BEP 일일 목표 제시·현금 매출 누락 세무 리스크·COGS 폭등×품목 마진 교차 분석.
 4. **[Agent 2 — BS 분석가]** — 동일 컨텍스트 주입 후: CCC·DSCR·Cash Runway 기반 실전 현금흐름 분석, 가수금(오너 자금 혼용) 리스크, **세무 캘린더 인식 Cash Reserve 권고(흑자도산 방지)**.

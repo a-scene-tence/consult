@@ -16,7 +16,13 @@ from web.api import (
 )
 from web.auth import require_admin
 from web.ratelimit import STRICT_RATE_LIMIT, limiter
-from web.services import get_draft_view, ingest_financials, record_feedback
+from web.services import (
+    get_draft_view,
+    ingest_financials,
+    load_parsing_memory,
+    record_feedback,
+    save_parsing_memory,
+)
 
 # 컨설팅 파이프라인은 전부 관리자(전문가) 전용.
 router = APIRouter(
@@ -35,6 +41,17 @@ class IngestIn(BaseModel):
     period: str
     pl_raw: dict[str, Any]
     bs_raw: dict[str, Any]
+
+
+class MemoryIn(BaseModel):
+    """전문가 승인 매핑(학습형 메모리). client_id 생략/None 이면 전역(공통) 매핑."""
+
+    client_id: str | None = None
+    raw_text: str
+    standard_key: str
+    target_sheet: str
+    korean_name: str | None = None
+    approved_by: str = "전문가"
 
 
 class FeedbackIn(BaseModel):
@@ -67,11 +84,39 @@ def parse(body: ParseIn, request: Request) -> dict[str, Any]:
     """
     from compute.reconcile import build_draft_master
 
+    # 전역+해당 고객 승인 매핑을 로드해 Agent 0(v1.1 Rule #0) 프롬프트에 주입 → 매핑 일관성.
+    approved_memory = load_parsing_memory(get_session_factory(request), body.client_id)
     parser_output = request.app.state.parse_fn(
-        body.raw_text, client_id=body.client_id, period=body.period
+        body.raw_text, client_id=body.client_id, period=body.period,
+        approved_memory=approved_memory,
     )
     draft = build_draft_master(parser_output)
-    return {"parser_output": parser_output, **draft}
+    return {"parser_output": parser_output, "approved_memory_count": len(approved_memory), **draft}
+
+
+@router.post("/parse/memory", status_code=201)
+def add_parse_memory(body: MemoryIn, request: Request) -> dict[str, Any]:
+    """전문가 승인 매핑을 저장(학습). 다음 파싱부터 Agent 0 이 강제 재사용한다(§0.5).
+
+    target_sheet 화이트리스트 위반 시 400(오염 방지). client_id 생략 시 전역 매핑.
+    """
+    memory_id = save_parsing_memory(
+        get_session_factory(request),
+        client_id=body.client_id,
+        raw_text=body.raw_text,
+        standard_key=body.standard_key,
+        target_sheet=body.target_sheet,
+        korean_name=body.korean_name,
+        approved_by=body.approved_by,
+    )
+    return {"memory_id": memory_id, "scope": "global" if body.client_id is None else body.client_id}
+
+
+@router.get("/parse/memory")
+def list_parse_memory(request: Request, client_id: str | None = None) -> dict[str, Any]:
+    """전역 + 해당 고객 승인 매핑 목록(전문가 검토용)."""
+    items = load_parsing_memory(get_session_factory(request), client_id)
+    return {"client_id": client_id, "count": len(items), "items": items}
 
 
 @router.post("/ingest", status_code=201)

@@ -9,15 +9,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from compute._common import validate_payload
 from compute.compute_bs import compute_bs, pl_context_from_pl
 from compute.compute_pl import compute_pl
 from db.models import (
+    PARSING_TARGET_SHEETS,
     Client,
     ExpertFeedback,
     Financials,
+    ParsingMemory,
     PublishedReport,
     ReportDraft,
 )
@@ -137,3 +139,64 @@ def get_dashboard(session_factory: Any, client_id: int) -> dict[str, Any] | None
         )
         row = session.execute(stmt).first()
         return row[0] if row else None
+
+
+# 파싱 시 Agent 0 프롬프트에 주입할 승인 메모리 필드(<approved_memory>).
+_MEMORY_FIELDS: tuple[str, ...] = ("raw_text", "standard_key", "target_sheet", "korean_name")
+
+
+def save_parsing_memory(
+    session_factory: Any,
+    *,
+    client_id: str | None,
+    raw_text: str,
+    standard_key: str,
+    target_sheet: str,
+    korean_name: str | None,
+    approved_by: str,
+) -> int:
+    """전문가 승인 매핑(원시→표준 Key/시트)을 upsert 하고 memory_id 를 반환한다.
+
+    `client_id=None` 이면 전역(공통) 매핑. `target_sheet` 는 화이트리스트로 검증(오염 방지,
+    위반 시 ValueError→400). (client_id, raw_text) 동일 시 갱신(멱등).
+    """
+    if target_sheet not in PARSING_TARGET_SHEETS:
+        raise ValueError(
+            f"target_sheet '{target_sheet}' 는 허용되지 않습니다. "
+            f"허용: {', '.join(PARSING_TARGET_SHEETS)}"
+        )
+    if not raw_text or not standard_key:
+        raise ValueError("raw_text·standard_key 는 필수입니다.")
+
+    with session_factory() as session:
+        existing = session.execute(
+            select(ParsingMemory).where(
+                ParsingMemory.client_id.is_(client_id) if client_id is None
+                else ParsingMemory.client_id == client_id,
+                ParsingMemory.raw_text == raw_text,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.standard_key = standard_key
+            existing.target_sheet = target_sheet
+            existing.korean_name = korean_name
+            existing.approved_by = approved_by
+            session.commit()
+            return existing.id
+        row = ParsingMemory(
+            client_id=client_id, raw_text=raw_text, standard_key=standard_key,
+            target_sheet=target_sheet, korean_name=korean_name, approved_by=approved_by,
+        )
+        session.add(row)
+        session.commit()
+        return row.id
+
+
+def load_parsing_memory(session_factory: Any, client_id: str | None) -> list[dict[str, Any]]:
+    """전역(client_id NULL) + 해당 고객 승인 매핑을 합쳐 주입용 dict 리스트로 반환한다."""
+    with session_factory() as session:
+        stmt = select(ParsingMemory).where(
+            or_(ParsingMemory.client_id.is_(None), ParsingMemory.client_id == client_id)
+        ).order_by(ParsingMemory.client_id.is_(None).desc(), ParsingMemory.id)
+        rows = session.execute(stmt).scalars().all()
+        return [{f: getattr(r, f) for f in _MEMORY_FIELDS} for r in rows]

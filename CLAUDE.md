@@ -17,6 +17,7 @@
 4. **문서 우선(Docs-first).** 코드 수정 전에 관련 MD 문서(SPEC/DESIGN)를 먼저 최신화한다. 승인 없이 코드 착수 금지.
 5. **전문가 게이트(P5).** 시스템에 유입되는 수치는 전문가가 정제한 표준화 Master 양식을 통해서만 들어온다. 원시 데이터를 직접(사람 검토 없이) compute 파이프라인에 넣는 코드를 만들지 않는다.
    - **(Phase 9) P5 자동 표준화 보조(assist).** LLM 데이터 엔지니어(Agent 0, `agents/data_engineer.py`)가 비표준 원시 데이터를 9대 표준 스키마로 파싱해 **표준화 Master 초안**을 만들 수 있다. 단 이 초안은 **전문가가 검토·보완·승인한 뒤에만** `POST /api/consulting/ingest`로 유입된다 — 사람이 최종 게이트임은 불변. Agent 0도 **무연산**(의미론적 매핑·정규화·동적 스키마 확장만)이며, 집계·총합 대사는 `compute/reconcile.py`가 Python으로 확정한다. 파싱 방어선은 `numeric_guard`가 아니라 **reconciliation**(원시 총합 대조, 불일치 시 `reconciliation_error`)이다. 표준 밖 데이터는 `schema_extensions`에 격리 보존하고 compute에 자동 주입하지 않는다.
+     - **(Phase 10) 승인 매핑 메모리(학습형, Rule #0).** 전문가가 승인한 '원시 텍스트 → 표준 Key/시트' 매핑을 `parsing_memory` 테이블에 영속화하고, 다음 파싱 시 **전역(공통) + 해당 고객** 메모리를 Agent 0 프롬프트의 `<approved_memory>`로 주입한다(v1.1 Rule #0 = 승인 매핑 **강제 재사용**). 목적은 회차 간 매핑 드리프트·환각 억제(일관성 락)이며 **무연산 원칙 불변**. 전문가 승인분만 신뢰 주입하고, `target_sheet`는 화이트리스트(`db.models.PARSING_TARGET_SHEETS`: 9대 블록 + `schema_extensions`)로 검증(위반 시 400)해 **메모리 오염**을 방지한다. API: `POST /api/consulting/parse/memory`(저장), `GET .../parse/memory`(조회).
 
 ---
 
@@ -183,7 +184,7 @@ consult/
 │   ├── rag_context.json         # 코호트 쿼리 반영
 │   └── past_case.json           # cohort_meta 반영
 ├── db/
-│   ├── migrations/              # DDL (clients 프로필 확장, recommendations 추가 예정)
+│   ├── migrations/              # DDL (clients 프로필 확장, recommendations, parsing_memory)
 │   └── models.py
 ├── compute/                     # 연산 레이어 (§3.0 의무 목록)
 │   ├── ingest.py                # Master 엑셀/CSV → 정형화 (P5 게이트 산출물만 수용)

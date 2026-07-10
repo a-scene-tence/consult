@@ -57,6 +57,33 @@
   <button id="btn-parse" class="mt-3 bg-amber-600 text-white text-sm rounded px-3 py-1.5">파싱 · 대사(초안 생성)</button>
   <div id="parse-result" class="text-sm mt-2"></div>
   <p class="text-xs text-slate-400 mt-1">초안은 아래 ② 업로드 칸에 자동 채워집니다. 전문가가 검토·보완 후 확정 업로드하세요(§0.5 게이트).</p>
+
+  <!-- Phase 10: 승인 매핑(학습형 메모리) — 다음 파싱부터 Agent 0 이 강제 재사용(Rule #0) -->
+  <div class="mt-4 border-t border-slate-100 pt-3">
+    <h3 class="text-sm font-semibold text-slate-700 mb-2">①-c 승인 매핑 추가 (학습형 메모리) <span class="text-xs font-normal text-slate-400">— 다음 파싱부터 자동·강제 재사용</span></h3>
+    <div class="grid grid-cols-2 gap-2 text-xs mb-2">
+      <input id="m-raw" class="border rounded px-2 py-1" placeholder="원시 텍스트(예: ○○은행 운전자금대출)" />
+      <input id="m-key" class="border rounded px-2 py-1" placeholder="표준 Key(예: 운전자금대출 / 임차료)" />
+      <select id="m-sheet" class="border rounded px-2 py-1">
+        <option value="opex">opex (판관비)</option>
+        <option value="cogs">cogs (매출원가)</option>
+        <option value="sales">sales (품목매출)</option>
+        <option value="debt">debt (차입금)</option>
+        <option value="inv">inv (재고)</option>
+        <option value="wc">wc (운전자본)</option>
+        <option value="od">od (오너자금)</option>
+        <option value="bs">bs (재무상태)</option>
+        <option value="schema_extensions">schema_extensions (동적 확장)</option>
+      </select>
+      <input id="m-korean" class="border rounded px-2 py-1" placeholder="한글명(선택)" />
+    </div>
+    <label class="flex items-center gap-1 text-xs text-slate-500 mb-2">
+      <input id="m-global" type="checkbox" /> 전역(공통) 매핑으로 저장 — 체크 해제 시 위 client_id 라벨 전용
+    </label>
+    <button id="btn-mem-save" class="bg-teal-600 text-white text-xs rounded px-3 py-1.5">승인 매핑 저장</button>
+    <button id="btn-mem-list" class="bg-slate-200 text-slate-700 text-xs rounded px-3 py-1.5">현재 매핑 보기</button>
+    <div id="mem-result" class="text-xs mt-2 text-slate-600"></div>
+  </div>
 </section>
 
 <!-- A-1 전문가 Master(JSON) 업로드 → ingest -->
@@ -106,10 +133,32 @@ document.addEventListener("DOMContentLoaded", () => {
         : `<span class="text-red-700">reconciliation_error: ${r.errors.join(", ")}</span>`;
       const exts = (d.schema_extensions || []).map(e => `${e.korean_name}(${e.generated_key})=${e.value}`).join(", ") || "없음";
       const warns = (d.warnings || []).join(" · ") || "없음";
-      box.innerHTML = `${status}<br/>확장항목: ${exts}<br/>경고: <span class="text-amber-700">${warns}</span>`;
+      box.innerHTML = `${status}<br/>확장항목: ${exts}<br/>경고: <span class="text-amber-700">${warns}</span><br/>적용된 승인 매핑: ${d.approved_memory_count ?? 0}건`;
       // 초안을 ② 업로드 칸에 자동 채움(전문가 검토·보완용).
       el("i-pl").value = JSON.stringify(d.pl_raw, null, 1);
       el("i-bs").value = JSON.stringify(d.bs_raw, null, 1);
+    } catch (e) { box.textContent = "오류: " + e.message; }
+  };
+
+  el("btn-mem-save").onclick = async () => {
+    const box = el("mem-result");
+    try {
+      const isGlobal = el("m-global").checked;
+      const d = await apiPost("/api/consulting/parse/memory", {
+        client_id: isGlobal ? null : el("p-client").value,
+        raw_text: el("m-raw").value, standard_key: el("m-key").value,
+        target_sheet: el("m-sheet").value, korean_name: el("m-korean").value || undefined,
+      });
+      box.innerHTML = `<span class="text-teal-700">저장됨</span> (memory_id=${d.memory_id}, 범위=${d.scope}) — 다음 파싱부터 강제 재사용됩니다.`;
+    } catch (e) { box.textContent = "오류: " + e.message; }
+  };
+
+  el("btn-mem-list").onclick = async () => {
+    const box = el("mem-result");
+    try {
+      const d = await apiGet(`/api/consulting/parse/memory?client_id=${encodeURIComponent(el("p-client").value)}`);
+      const rows = (d.items || []).map(m => `${m.raw_text} → ${m.standard_key} [${m.target_sheet}]`).join("<br/>") || "없음";
+      box.innerHTML = `<b>승인 매핑 ${d.count}건</b>(전역+${el("p-client").value}):<br/>${rows}`;
     } catch (e) { box.textContent = "오류: " + e.message; }
   };
 

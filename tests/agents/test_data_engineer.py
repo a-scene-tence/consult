@@ -68,3 +68,38 @@ def test_parse_raw_persistent_schema_violation_raises():
     with pytest.raises(ValueError):
         parse_raw("...", client_id="C-1001", period="2025-Q3",
                   client=_FakeClient([bad, bad, bad]))
+
+
+class _CapturingClient:
+    """system 프롬프트를 캡처하는 fake — 승인 메모리 주입 검증용."""
+
+    def __init__(self, output):
+        self._output = output
+        self.system = None
+        self.messages = self
+
+    def create(self, **kwargs):
+        self.system = kwargs["system"]
+        block = SimpleNamespace(type="tool_use", name=kwargs["tools"][0]["name"], input=self._output)
+        return SimpleNamespace(content=[block])
+
+
+def test_parse_raw_injects_approved_memory():
+    """v1.1: 승인 메모리가 <approved_memory> + Rule #0 로 시스템 프롬프트에 주입된다."""
+    mem = [{"raw_text": "○○은행 운전자금대출", "standard_key": "운전자금대출",
+            "target_sheet": "debt", "korean_name": "운전자금대출"}]
+    client = _CapturingClient(_valid_output())
+    parse_raw("원시...", client_id="C-1001", period="2025-Q3", approved_memory=mem, client=client)
+    assert "Rule #0" in client.system              # 최우선 규칙(강제 재사용)
+    assert "<approved_memory>" in client.system     # 주입 블록
+    assert "○○은행 운전자금대출" in client.system   # 승인된 원시 텍스트
+    assert "운전자금대출" in client.system           # 표준 Key
+
+
+def test_parse_raw_no_memory_placeholder():
+    """승인 메모리가 없으면 자리표시자가 들어가고 정상 파싱된다."""
+    client = _CapturingClient(_valid_output())
+    out = parse_raw("원시...", client_id="C-1001", period="2025-Q3",
+                    approved_memory=None, client=client)
+    assert "승인된 매핑 없음" in client.system
+    assert out["info"]["client_id"] == "C-1001"

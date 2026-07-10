@@ -17,7 +17,7 @@
 ### [BUG-####] <한 줄 제목>
 - 일시: YYYY-MM-DD HH:MM (KST)
 - 심각도: Critical | High | Medium | Low
-- 카테고리: hallucination | context_loss | role_violation | contradiction | feedback_ignored | schema_violation | compute_error | infra | rag_contamination | similarity_mismatch | pii_leak | reconciliation_error | division_by_zero | followup_missing_baseline | category_mismatch
+- 카테고리: hallucination | context_loss | role_violation | contradiction | feedback_ignored | schema_violation | compute_error | infra | rag_contamination | similarity_mismatch | pii_leak | reconciliation_error | division_by_zero | followup_missing_baseline | category_mismatch | memory_poisoning
 - 관련 에이전트/모듈: Agent 1(PL) | Agent 2(BS) | Agent 3(리포트마스터) | Agent 4(발행가) | compute | orchestrator | web | db | rag | masking | case_indexer | ingest(Master 게이트) | followup
 - 관련 리포트: <client_id> / <period> / <version> / <draft_id>
 - 상태: Open | Investigating | Fixed | Won't Fix | Regression-Guarded
@@ -68,6 +68,7 @@
 | `division_by_zero` | 미시 연산의 0-나눗셈 — 판매수량 0, 전기 0, CL/EQUITY/월 원리금 0 등 | BEP·마진율·DSCR 계산 crash 또는 inf | compute 0-나눗셈 방어(명시 에러 또는 N/A), 경계 골든 테스트(CLAUDE.md §3.0) |
 | `followup_missing_baseline` | **직전 데이터가 없는 신규 고객**에 대한 Follow-up 분석 예외 처리 누락 | 신규 고객인데 이행 점검 서술이 생성되거나 파이프라인 에러 | `is_first_round=true` baseline 모드 분기(SPEC §1.5), 오케스트레이터 필수 체크 |
 | `category_mismatch` | **이종 상권/타겟 벤치마크 오염** — 코호트가 다른 케이스(다른 상권·성별·연령대·성향)가 RAG 벤치마크로 주입 | 오피스 상권 치킨집에 관광지 카페 교훈이 인용됨 | 코호트 메타 필터 강제 + 완화 수준 기록(CLAUDE.md §2.4), 주입 케이스 cohort_meta 검사 |
+| `memory_poisoning` | **(Phase 10) 승인 매핑 메모리 오염** — 잘못된/미승인 매핑이 `<approved_memory>`로 주입돼 Agent 0 이 원시 데이터를 엉뚱한 표준 Key/시트로 강제 매핑(Rule #0 역효과) | '임차료'가 debt 시트로, 매입이 매출로 굳어져 회차마다 재현 | 전문가 승인분만 저장·주입, `target_sheet` 화이트리스트 검증(위반 400), (client_id, raw_text) upsert로 중복 방지(CLAUDE.md §0.5) |
 
 ---
 
@@ -183,5 +184,6 @@
 - [ ] **임베딩 노후/드리프트:** 임베딩 모델 교체·업종 분포 변화로 유사도 품질 저하 → 재임베딩 주기·회귀 모니터링.
 - [ ] **마스킹 회귀(`pii_leak`):** 마스킹 규칙 변경으로 상호명·정확 위치/나이·정확 금액 유출 → 마스킹 골든 테스트·주입 전 스캔 상시 유지.
 - [ ] **Master 양식 버전 드리프트:** 표준화 양식 개정 시 구버전 업로드 혼입 → 양식 버전 필드·ingest 검증.
+- [ ] **승인 매핑 메모리 오염/노후(`memory_poisoning`):** 초기 승인 매핑이 잘못되면 Rule #0 로 회차마다 오매핑 재현 → 저장 시 target_sheet 화이트리스트, 전문가 승인분만 주입, 잘못된 항목은 재승인(upsert)으로 교정. 사업 변화로 매핑이 낡으면 갱신.
 - [ ] **세무 캘린더 유지보수:** 세법 개정으로 신고 일정 변경 시 정적 설정 갱신 누락 → 연 1회 이상 점검 항목화.
 - [ ] **프로필 노후화:** 상권 변화·업종 전환 등 프로필 변경 미반영 → 회차 시작 시 프로필 확인 단계.
