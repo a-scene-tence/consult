@@ -19,7 +19,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from orchestrator import IllegalTransition
-from web.api import auth, clients, consulting, dashboard
+from web.api import auth, clients, consulting, dashboard, reports
 from web.logging_config import configure_logging
 from web.ratelimit import limiter
 
@@ -97,6 +97,7 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(clients.router)
     app.include_router(consulting.router)
+    app.include_router(reports.router)  # 공개 사장님 리포트 조회(무인증)
     app.include_router(dashboard.router)
 
     # 정적 자산.

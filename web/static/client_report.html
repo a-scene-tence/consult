@@ -12,6 +12,8 @@
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
   />
+  <!-- marked.js — Agent 마크다운 본문 → HTML 변환 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     // 브랜드 컬러 토큰 (index.html 조종석과 동일 컨벤션)
     tailwind.config = {
@@ -25,6 +27,14 @@
   </script>
   <style>
     body { -webkit-font-smoothing: antialiased; }
+    /* marked.js 로 생성된 마크다운 본문 기본 타이포그래피(Typography 플러그인 대체) */
+    .md-body p { margin: 0 0 0.6rem; line-height: 1.65; }
+    .md-body p:last-child { margin-bottom: 0; }
+    .md-body strong { font-weight: 700; color: #0f172a; }
+    .md-body ul { list-style: disc; padding-left: 1.25rem; margin: 0.4rem 0; }
+    .md-body ol { list-style: decimal; padding-left: 1.25rem; margin: 0.4rem 0; }
+    .md-body li { margin: 0.2rem 0; line-height: 1.6; }
+    .md-body h1, .md-body h2, .md-body h3 { font-weight: 700; color: #0f172a; margin: 0.5rem 0 0.3rem; }
   </style>
 </head>
 
@@ -35,8 +45,25 @@
   API 바인딩형 화면은 web/templates/dashboard.html(B-1) 참조. 이 파일은 정적 뼈대.
 -->
 <body class="bg-gray-50 text-slate-800 font-sans">
-  <!-- 모바일 컨테이너: 480px 중앙 정렬 -->
-  <div class="mx-auto max-w-[480px] min-h-screen bg-gray-50 flex flex-col">
+
+  <!-- ============ 로딩 오버레이 ============ -->
+  <div id="loadingOverlay"
+    class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-gray-50 px-8 text-center">
+    <i class="fa-solid fa-spinner fa-spin text-3xl text-brand-600"></i>
+    <p class="text-sm font-medium text-slate-500">리포트를 불러오는 중입니다...</p>
+  </div>
+
+  <!-- ============ 에러/Fallback 오버레이 ============ -->
+  <div id="errorOverlay"
+    class="fixed inset-0 z-50 hidden flex-col items-center justify-center gap-4 bg-gray-50 px-8 text-center">
+    <span class="inline-flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+      <i class="fa-solid fa-circle-exclamation text-2xl"></i>
+    </span>
+    <p id="errorMsg" class="text-base font-semibold leading-relaxed text-slate-600"></p>
+  </div>
+
+  <!-- 모바일 컨테이너: 480px 중앙 정렬 (로드 완료 전 숨김) -->
+  <div id="reportRoot" class="mx-auto hidden max-w-[480px] min-h-screen bg-gray-50 flex-col">
 
     <!-- ============ ① 상단 헤더 ============ -->
     <header class="sticky top-0 z-10 bg-white shadow-sm">
@@ -49,7 +76,7 @@
           <span class="text-lg font-extrabold tracking-tight text-slate-900">Consult AI</span>
         </div>
         <!-- 우: 분석 기간 뱃지 · ← dashboard_payload.client.period -->
-        <span class="inline-flex items-center rounded-full bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-800">
+        <span id="periodBadge" class="inline-flex items-center rounded-full bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-800">
           2025년 3분기 분석
         </span>
       </div>
@@ -61,9 +88,9 @@
       <!-- ============ ② 핵심 요약 카드 (Hero) ============ -->
       <!-- ← dashboard_payload.client.name / hero_kpis / kpis -->
       <section class="rounded-2xl bg-slate-800 p-6 text-white shadow-lg">
-        <!-- 인사말 -->
+        <!-- 인사말 · ← client.name -->
         <p class="text-base leading-relaxed">
-          <span class="font-bold text-white">홍길동치킨 대표님,</span><br />
+          <span id="greetingName" class="font-bold text-white">홍길동치킨 대표님,</span><br />
           이번 분기 수고 많으셨습니다.
         </p>
 
@@ -74,20 +101,20 @@
             <p class="flex items-center gap-1.5 text-xs font-medium text-slate-300">
               <i class="fa-solid fa-bullseye"></i> 손익분기점 달성률
             </p>
-            <p class="mt-2 text-xl font-extrabold text-emerald-400 tabular-nums">276%</p>
-            <p class="mt-1 text-[11px] leading-snug text-slate-400">
-              목표 4,706만 원 중<br /><span class="font-semibold text-emerald-300">1억 3,000만 원 달성</span>
+            <p id="bepValue" class="mt-2 text-xl font-extrabold text-emerald-400 tabular-nums">276%</p>
+            <p id="bepSub" class="mt-1 text-[11px] leading-snug text-slate-400">
+              손익분기점 대비 현재 매출 수준
             </p>
           </div>
 
-          <!-- 가용현금 생존 개월 · ← kpis[key=cash_runway_months] -->
+          <!-- 가용현금 생존 개월 · ← kpis[key=cash_runway_months] (3개월 미만=위험) -->
           <div class="rounded-xl bg-slate-700/60 p-4">
             <p class="flex items-center gap-1.5 text-xs font-medium text-slate-300">
               <i class="fa-solid fa-piggy-bank"></i> 가용현금 생존
             </p>
-            <p class="mt-2 text-xl font-extrabold text-amber-400 tabular-nums">2.7 <span class="text-sm font-semibold">개월</span></p>
-            <p class="mt-1 text-[11px] leading-snug text-slate-400">
-              현재 고정비 기준<br /><span class="font-semibold text-amber-300">2.7 개월 확보</span>
+            <p id="runwayValue" class="mt-2 text-xl font-extrabold text-amber-400 tabular-nums">2.7 <span class="text-sm font-semibold">개월</span></p>
+            <p id="runwaySub" class="mt-1 text-[11px] leading-snug text-slate-400">
+              현재 고정비 기준 생존 개월
             </p>
           </div>
         </div>
@@ -104,14 +131,14 @@
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
               <i class="fa-solid fa-chart-line"></i>
             </span>
-            <h3 class="text-base font-bold text-slate-900">수익성 분석</h3>
+            <h3 id="card1Title" class="text-base font-bold text-slate-900">수익성 분석</h3>
           </div>
-          <p class="mt-3 text-sm leading-relaxed text-slate-600">
+          <div id="card1Body" class="md-body mt-3 text-sm text-slate-600">
             일일 손익분기 도달을 위해 하루
-            <span class="font-bold text-slate-900">후라이드 38마리</span>
+            <strong>후라이드 38마리</strong>
             판매가 필수적입니다. 현재 주력 품목의 공헌이익이 가장 크므로, 이 품목의 판매량 유지가
             분기 목표 달성의 핵심입니다.
-          </p>
+          </div>
         </article>
 
         <!-- [카드 2] 💰 현금흐름 및 부채 분석 (Agent 2) -->
@@ -120,17 +147,17 @@
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <i class="fa-solid fa-wallet"></i>
             </span>
-            <h3 class="text-base font-bold text-slate-900">현금흐름 및 부채 분석</h3>
+            <h3 id="card2Title" class="text-base font-bold text-slate-900">현금흐름 및 부채 분석</h3>
           </div>
-          <p class="mt-3 text-sm leading-relaxed text-slate-600">
+          <div id="card2Body" class="md-body mt-3 text-sm text-slate-600">
             <span class="font-bold text-red-600">
               <i class="fa-solid fa-triangle-exclamation"></i>
               1.2개월 뒤 부가세 납부가 도래
             </span>
             할 예정입니다. 현재 현금 흐름상 압박 위험이 있으니, 지금부터 세금 납부용
-            <span class="font-semibold text-slate-900">유보금 확보</span>를 강력히 권고드립니다.
+            <strong>유보금 확보</strong>를 강력히 권고드립니다.
             흑자도산을 예방하는 가장 중요한 조치입니다.
-          </p>
+          </div>
         </article>
 
         <!-- [카드 3] 🤖 마스터 종합 의견 (Agent 3·4) -->
@@ -139,12 +166,12 @@
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-700">
               <i class="fa-solid fa-robot"></i>
             </span>
-            <h3 class="text-base font-bold text-slate-900">마스터 종합 의견</h3>
+            <h3 id="card3Title" class="text-base font-bold text-slate-900">마스터 종합 의견</h3>
           </div>
-          <blockquote class="mt-3 border-l-4 border-slate-300 pl-4 text-sm italic leading-relaxed text-slate-600">
+          <blockquote id="card3Body" class="md-body mt-3 border-l-4 border-slate-300 pl-4 text-sm italic leading-relaxed text-slate-600">
             이번 분기는 손익분기점을 크게 상회하며 수익성은 매우 견고합니다. 다만 다가오는 부가세
-            납부와 현금 유보 여력이 관건입니다. <span class="font-semibold not-italic text-slate-900">“버는 힘”은
-            충분하니, 이제 “지키는 힘”(현금 관리)에 집중</span>하신다면 안정적인 성장이 가능합니다.
+            납부와 현금 유보 여력이 관건입니다. <strong class="not-italic">“버는 힘”은
+            충분하니, 이제 “지키는 힘”(현금 관리)에 집중</strong>하신다면 안정적인 성장이 가능합니다.
           </blockquote>
         </article>
       </section>
@@ -158,5 +185,119 @@
       </p>
     </footer>
   </div>
+
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+
+    // ── 오버레이 제어 ──
+    function showError(message) {
+      $("loadingOverlay").style.display = "none";
+      $("reportRoot").classList.add("hidden");
+      $("errorMsg").textContent = message;
+      const err = $("errorOverlay");
+      err.classList.remove("hidden");
+      err.style.display = "flex";
+    }
+    function showReport() {
+      $("loadingOverlay").style.display = "none";
+      $("errorOverlay").style.display = "none";
+      const root = $("reportRoot");
+      root.classList.remove("hidden");
+      root.classList.add("flex");
+    }
+
+    // ── URL 파라미터에서 client_id 추출 (client_id 우선, 없으면 id) ──
+    function getClientId() {
+      const q = new URLSearchParams(window.location.search);
+      return q.get("client_id") || q.get("id");
+    }
+
+    // ── dashboard_payload 유틸 ──
+    // hero_kpis + kpis 를 합쳐 key 로 KPI 를 찾는다(무연산 — 값 인용만).
+    function findKpi(payload, key) {
+      const all = [].concat(payload.hero_kpis || [], payload.kpis || []);
+      return all.find((k) => k.key === key) || null;
+    }
+    const fmtNum = (n) =>
+      Number(n).toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+
+    // 마크다운 → HTML (marked.js). 미로드 시 평문 폴백.
+    function toHtml(md) {
+      const text = md || "";
+      if (window.marked && typeof marked.parse === "function") return marked.parse(text);
+      return text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+
+    // ── 데이터 바인딩 ──
+    function render(payload) {
+      const client = payload.client || {};
+      // 헤더 · 인사말
+      if (client.period) $("periodBadge").textContent = client.period + " 분석";
+      if (client.name) $("greetingName").textContent = client.name + " 대표님,";
+
+      // Hero KPI ① 손익분기점 달성률
+      const bep = findKpi(payload, "bep_attainment");
+      if (bep && bep.value_pct != null) {
+        $("bepValue").textContent = fmtNum(bep.value_pct) + "%";
+      }
+
+      // Hero KPI ② 가용현금 생존 개월 (3개월 미만=위험 붉은색, 이상=노랑/녹색)
+      const runway = findKpi(payload, "cash_runway_months");
+      if (runway && runway.value != null) {
+        const months = Number(runway.value);
+        $("runwayValue").innerHTML =
+          fmtNum(months) + ' <span class="text-sm font-semibold">개월</span>';
+        const el = $("runwayValue");
+        el.classList.remove("text-red-400", "text-amber-400", "text-emerald-400");
+        el.classList.add(
+          months < 3 ? "text-red-400" : months < 6 ? "text-amber-400" : "text-emerald-400"
+        );
+      }
+
+      // Agent 카드: report_sections[] 를 카드 1~3 에 순서 매핑 (제목+마크다운 본문)
+      const sections = payload.report_sections || [];
+      [1, 2, 3].forEach((i) => {
+        const body = $("card" + i + "Body");
+        const article = body.closest("article");
+        const sec = sections[i - 1];
+        if (sec) {
+          if (sec.title) $("card" + i + "Title").textContent = sec.title;
+          body.innerHTML = toHtml(sec.body_md);
+        } else if (article) {
+          article.style.display = "none"; // 해당 섹션 없으면 카드 숨김(스테일 방지)
+        }
+      });
+
+      showReport();
+    }
+
+    // ── 비동기 로드 흐름 ──
+    async function loadReport() {
+      const clientId = getClientId();
+      if (!clientId) {
+        showError("잘못된 접근입니다. 리포트 링크를 다시 확인해주세요.");
+        return;
+      }
+      try {
+        // 사장님 공개 조회(무인증) — 최신 발행 리포트(dashboard_payload)
+        const r = await fetch(
+          "/api/consulting/reports/" + encodeURIComponent(clientId) + "/latest"
+        );
+        if (r.status === 404) {
+          showError("아직 리포트가 생성 중입니다. 세무 파트너에게 문의해주세요.");
+          return;
+        }
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const payload = await r.json();
+        render(payload);
+      } catch (e) {
+        console.error("리포트 로드 실패:", e);
+        showError("아직 리포트가 생성 중입니다. 세무 파트너에게 문의해주세요.");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadReport);
+  </script>
 </body>
 </html>
