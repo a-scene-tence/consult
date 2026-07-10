@@ -362,7 +362,9 @@
           const opt = document.createElement("option");
           opt.value = c.id;                       // 정수 DB id (ingest 용)
           opt.dataset.cid = c.client_id;          // 문자 라벨 (parse 용)
-          opt.textContent = c.name + " (" + c.client_id + ")";
+          // 예: "홍길동치킨 역삼점 - 홍길동 (C-1001)". 상호명 없으면 대표자명만 표시.
+          const prefix = c.trade_name ? c.trade_name + " - " : "";
+          opt.textContent = prefix + c.name + " (" + c.client_id + ")";
           sel.appendChild(opt);
         }
       } catch (e) {

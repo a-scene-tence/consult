@@ -69,7 +69,10 @@ def list_clients(session_factory: Any) -> list[dict[str, Any]]:
     """
     with session_factory() as session:
         rows = session.execute(select(Client).order_by(Client.id)).scalars().all()
-        return [{"id": c.id, "client_id": f"C-{c.id}", "name": c.name} for c in rows]
+        return [
+            {"id": c.id, "client_id": f"C-{c.id}", "name": c.name, "trade_name": c.trade_name}
+            for c in rows
+        ]
 
 
 def ingest_financials(

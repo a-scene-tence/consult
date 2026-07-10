@@ -42,6 +42,8 @@ def test_list_clients_returns_bridge_fields(client):
     for row in data:
         assert row["client_id"] == f"C-{row['id']}"  # 라벨 파생 규칙 일관성
         assert "name" in row
+        assert "trade_name" in row                    # 상호명 필드 존재(식별용)
+        assert row["trade_name"] == PROFILE["trade_name"]
     assert by_id[id1]["name"] == "김사장"
 
 
