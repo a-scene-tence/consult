@@ -61,6 +61,17 @@ def create_client(session_factory: Any, body: dict[str, Any]) -> int:
         return client.id
 
 
+def list_clients(session_factory: Any) -> list[dict[str, Any]]:
+    """등록된 고객 목록을 조종석 드롭다운용 최소 필드로 반환한다.
+
+    `client_id` 문자 라벨은 DB에 저장되지 않고 `orchestrator._client_profile` 과 동일하게
+    `f"C-{id}"` 로 파생한다(라벨 규칙 일관성). value=정수 id / data-cid=문자 라벨 브리지의 원천.
+    """
+    with session_factory() as session:
+        rows = session.execute(select(Client).order_by(Client.id)).scalars().all()
+        return [{"id": c.id, "client_id": f"C-{c.id}", "name": c.name} for c in rows]
+
+
 def ingest_financials(
     session_factory: Any,
     client_id: int,

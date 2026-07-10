@@ -140,10 +140,9 @@
               <label class="block">
                 <span class="text-sm font-medium text-slate-700">고객 선택</span>
                 <!-- value=정수 DB id(→ingest), data-cid=문자 라벨(→parse) -->
+                <!-- 옵션은 GET /api/clients 로 동적 렌더(loadClientList). value=정수 id, data-cid=문자 라벨 -->
                 <select id="clientSelect" class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600">
-                  <option value="1" data-cid="C-1001">C-1001 · 홍길동치킨</option>
-                  <option value="2" data-cid="C-1002">C-1002 · 역삼분식</option>
-                  <option value="3" data-cid="C-1003">C-1003 · 오피스카페</option>
+                  <option>고객 목록 로딩 중...</option>
                 </select>
               </label>
               <label class="block">
@@ -345,6 +344,33 @@
       reflectAuth();
     }
 
+    // ── 고객 드롭다운 동적 로드 (GET /api/clients, admin JWT) ──
+    // value=정수 DB id(→ingest), data-cid=문자 라벨 'C-{id}'(→parse) 브리지를 그대로 유지한다.
+    async function loadClientList() {
+      const sel = $("clientSelect");
+      sel.innerHTML = '<option>고객 목록 로딩 중...</option>';
+      try {
+        const r = await fetch("/api/clients", { headers: { ...authHeaders() } });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const clients = await r.json();
+        sel.innerHTML = "";
+        const ph = document.createElement("option");
+        ph.value = "";
+        ph.textContent = "고객을 선택하세요";
+        sel.appendChild(ph);
+        for (const c of clients) {
+          const opt = document.createElement("option");
+          opt.value = c.id;                       // 정수 DB id (ingest 용)
+          opt.dataset.cid = c.client_id;          // 문자 라벨 (parse 용)
+          opt.textContent = c.name + " (" + c.client_id + ")";
+          sel.appendChild(opt);
+        }
+      } catch (e) {
+        console.error("고객 목록 로드 실패:", e);
+        sel.innerHTML = '<option value="">고객 목록을 불러오지 못했습니다</option>';
+      }
+    }
+
     // ── 공통 JSON POST (auth 첨부, 오류 throw) ──
     async function apiPost(url, bodyObj) {
       const r = await fetch(url, {
@@ -440,7 +466,8 @@
       const btn = $("btnParse");
       if (!getToken()) { alert("먼저 우측 상단에서 로그인해주세요."); return; }
       const opt = $("clientSelect").selectedOptions[0];
-      const client_id = opt.dataset.cid;                 // 문자 라벨 (parse 용)
+      const client_id = opt ? opt.dataset.cid : undefined; // 문자 라벨 (parse 용)
+      if (!client_id) { alert("고객을 선택하세요."); return; }
       const period = $("periodInput").value.trim();
       const raw_text = $("rawDataInput").value.trim();
       if (!raw_text) { alert("원시 데이터(Raw Data)를 입력해주세요."); return; }
@@ -470,6 +497,7 @@
       if (!currentParsedData) { alert("먼저 Step 1에서 원시 데이터를 파싱해주세요."); return; }
 
       const client_id = parseInt($("clientSelect").value, 10);   // 정수 DB id (ingest 용)
+      if (!Number.isInteger(client_id)) { alert("고객을 선택하세요."); return; }
       const period = $("periodInput").value.trim();
 
       startLoading(btn, "분석 엔진 가동 중...");
@@ -495,9 +523,12 @@
     // ── 초기화 ──
     document.addEventListener("DOMContentLoaded", () => {
       reflectAuth();
+      if (getToken()) loadClientList();          // 새로고침 시 토큰 있으면 즉시 로드
       $("btnLogin").addEventListener("click", async () => {
-        try { await login($("loginUser").value, $("loginPass").value); }
-        catch (e) { alert("로그인 실패: " + e.message); }
+        try {
+          await login($("loginUser").value, $("loginPass").value);
+          loadClientList();                        // 로그인 성공(토큰 저장) 직후 로드
+        } catch (e) { alert("로그인 실패: " + e.message); }
       });
       $("btnParse").addEventListener("click", onParse);
       $("btnApprove").addEventListener("click", onApprove);
