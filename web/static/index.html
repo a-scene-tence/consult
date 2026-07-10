@@ -89,7 +89,16 @@
           <p class="text-xs text-slate-400">새 리포트 발행 · P5 데이터 파이프라인</p>
           <h1 class="text-lg font-bold text-slate-900">원시 데이터 정제 & 최종 승인</h1>
         </div>
-        <div class="flex items-center gap-2 text-sm">
+        <div class="flex items-center gap-3 text-sm">
+          <!-- 미니 로그인 바 (토큰 없을 때 표시) — /api/auth/token -->
+          <div id="loginBar" class="flex items-center gap-2">
+            <input id="loginUser" value="admin" class="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-xs" placeholder="아이디" />
+            <input id="loginPass" type="password" value="admin-secret" class="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-xs" placeholder="비밀번호" />
+            <button id="btnLogin" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium">로그인</button>
+          </div>
+          <span id="authState" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <i class="fa-solid fa-circle-check"></i> 로그인됨
+          </span>
           <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
             <i class="fa-solid fa-hourglass-half"></i> 검증 대기
           </span>
@@ -130,15 +139,16 @@
             <div class="grid sm:grid-cols-2 gap-4">
               <label class="block">
                 <span class="text-sm font-medium text-slate-700">고객 선택</span>
-                <select class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600">
-                  <option>C-1001 · 홍길동치킨</option>
-                  <option>C-1002 · 역삼분식</option>
-                  <option>C-1003 · 오피스카페</option>
+                <!-- value=정수 DB id(→ingest), data-cid=문자 라벨(→parse) -->
+                <select id="clientSelect" class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600">
+                  <option value="1" data-cid="C-1001">C-1001 · 홍길동치킨</option>
+                  <option value="2" data-cid="C-1002">C-1002 · 역삼분식</option>
+                  <option value="3" data-cid="C-1003">C-1003 · 오피스카페</option>
                 </select>
               </label>
               <label class="block">
                 <span class="text-sm font-medium text-slate-700">분석 기간</span>
-                <input type="text" value="2025-Q3"
+                <input id="periodInput" type="text" value="2025-Q3"
                   class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
                   placeholder="예: 2025-Q3" />
               </label>
@@ -146,14 +156,14 @@
 
             <label class="block">
               <span class="text-sm font-medium text-slate-700">원시 데이터 (Raw Data)</span>
-              <textarea rows="7"
+              <textarea id="rawDataInput" rows="7"
                 class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
                 placeholder="예)&#10;07/01 후라이드치킨(반반) 18,000원 x 3건&#10;07/01 콜라(병) 2,000원 x 5건&#10;배달의민족 정산 배달수수료 8,200,000원 차감&#10;세금계산서 생닭 매입 41,000,000원&#10;소상공인 방역지원금 2,000,000원 입금"></textarea>
             </label>
 
             <div class="flex justify-end">
-              <button onclick="document.getElementById('panelB').scrollIntoView({behavior:'smooth'})"
-                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm transition">
+              <button id="btnParse"
+                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold shadow-sm transition">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> Agent 0 파싱 및 오차 검증 시작
               </button>
             </div>
@@ -179,29 +189,34 @@
               <!-- ① 통장 총매출 (source_raw_sum) -->
               <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-solid fa-building-columns"></i> 통장 총매출액</p>
-                <p class="mt-2 text-2xl font-extrabold text-slate-800 tabular-nums">130,000,000<span class="text-sm font-medium text-slate-400 ml-1">원</span></p>
+                <p class="mt-2 text-2xl font-extrabold text-slate-800 tabular-nums"><span id="kpiSource">130,000,000</span><span class="text-sm font-medium text-slate-400 ml-1">원</span></p>
                 <p class="text-xs text-slate-400 mt-1">source_raw_sum</p>
               </div>
               <!-- ② POS 합산 (item_revenue) -->
               <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-solid fa-cash-register"></i> POS 합산 매출</p>
-                <p class="mt-2 text-2xl font-extrabold text-slate-800 tabular-nums">120,500,000<span class="text-sm font-medium text-slate-400 ml-1">원</span></p>
+                <p class="mt-2 text-2xl font-extrabold text-slate-800 tabular-nums"><span id="kpiPos">120,500,000</span><span class="text-sm font-medium text-slate-400 ml-1">원</span></p>
                 <p class="text-xs text-slate-400 mt-1">Σ(단가 × 수량)</p>
               </div>
-              <!-- ③ 미분류 차액 (Variance) — 오차 강조(붉은색 + 경고 아이콘) -->
-              <div class="rounded-xl border-2 border-red-300 bg-red-50 p-4">
+              <!-- ③ 미분류 차액 (Variance) — 오차 강조(붉은색 + 경고 아이콘). JS가 차액=0이면 초록으로 토글 -->
+              <div id="varianceWidget" class="rounded-xl border-2 border-red-300 bg-red-50 p-4">
                 <p class="text-xs text-red-600 font-semibold flex items-center gap-1.5">
                   <i class="fa-solid fa-triangle-exclamation"></i> 미분류 차액 (Variance)
                 </p>
-                <p class="mt-2 text-2xl font-extrabold text-red-600 tabular-nums">9,500,000<span class="text-sm font-medium text-red-400 ml-1">원</span></p>
+                <p class="mt-2 text-2xl font-extrabold text-red-600 tabular-nums"><span id="kpiVariance">9,500,000</span><span class="text-sm font-medium text-red-400 ml-1">원</span></p>
                 <p class="text-xs text-red-500 mt-1">unallocated_cash_sales · 현금매출 누락 추정</p>
               </div>
             </div>
 
-            <!-- 오차 경고 배너 -->
-            <div class="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            <!-- 오차 경고 배너 (JS가 차액≠0일 때만 표시) -->
+            <div id="varianceBanner" class="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
               <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
-              <p><strong>대사 불일치(reconciliation_error) 감지.</strong> 통장 총매출과 POS 합산의 차액 9,500,000원이 품목에 매칭되지 않았습니다. 미분류 현금매출로 분류하거나 원시 데이터를 재검토하세요.</p>
+              <p id="varianceMsg"><strong>대사 불일치(reconciliation_error) 감지.</strong> 통장 총매출과 POS 합산의 차액 9,500,000원이 품목에 매칭되지 않았습니다. 미분류 현금매출로 분류하거나 원시 데이터를 재검토하세요.</p>
+            </div>
+            <!-- 대사 일치 배너 (JS가 차액=0일 때 표시) -->
+            <div id="matchBanner" class="hidden items-start gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+              <i class="fa-solid fa-circle-check mt-0.5"></i>
+              <p><strong>대사 일치.</strong> 통장 총매출과 POS 합산이 정합합니다(미분류 차액 0원).</p>
             </div>
 
             <!-- 신규 확장 스키마 테이블 (schema_extensions[]) -->
@@ -219,7 +234,8 @@
                       <th class="text-right font-medium px-4 py-2.5">값</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-slate-100">
+                  <!-- schema_extensions[] 를 JS가 동적 렌더 -->
+                  <tbody id="extTbody" class="divide-y divide-slate-100">
                     <tr class="hover:bg-slate-50">
                       <td class="px-4 py-3 font-mono text-brand-700">government_subsidy</td>
                       <td class="px-4 py-3 text-slate-700">소상공인 방역지원금</td>
@@ -259,7 +275,7 @@
           <div class="p-6 space-y-4">
             <label class="block">
               <span class="text-sm font-medium text-slate-700">검토 의견</span>
-              <textarea rows="3"
+              <textarea id="reviewInput" rows="3"
                 class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
                 placeholder="예) POS 데이터 오차 없음. 미분류 차액은 현금매출로 분류 확인. 방역지원금 확장 키 승인함."></textarea>
             </label>
@@ -269,14 +285,14 @@
                 <span class="text-sm font-medium text-slate-700">전자 서명</span>
                 <div class="mt-1.5 relative">
                   <i class="fa-solid fa-signature absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                  <input type="text"
+                  <input id="signatureInput" type="text"
                     class="w-full rounded-lg border-slate-300 border pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
                     placeholder="검수자 성명을 입력하세요" />
                 </div>
               </label>
 
-              <button
-                class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-lg shadow-emerald-600/20 transition w-full sm:w-auto">
+              <button id="btnApprove"
+                class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-bold shadow-lg shadow-emerald-600/20 transition w-full sm:w-auto">
                 <i class="fa-solid fa-circle-check"></i> 최종 승인 및 리포트 분석 가동
               </button>
             </div>
@@ -289,5 +305,203 @@
       </main>
     </div>
   </div>
+
+  <!--
+    ============ 바닐라 JS: 조종석 ↔ 백엔드 API 연동 ============
+    · 반드시 서버가 서빙하는 http://<host>/static/index.html 로 접속해야 상대경로 /api 호출이 동작한다
+      (file:// 단독 열람은 UI 렌더만 됨).
+    · 외부 라이브러리(jQuery/Axios) 미사용 — fetch + async/await + ES6 만 사용.
+    · 엔드포인트: POST /api/auth/token (로그인), POST /api/consulting/parse (Agent 0 파싱+대사),
+                  POST /api/consulting/ingest (전문가 승인 → compute 이관). 모두 admin JWT 필요.
+  -->
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+
+    // ── 전역 상태: Step 1(파싱) ↔ Step 3(승인) 사이 초안(Draft) 보관 ──
+    let currentParsedData = null;
+
+    // ── 토큰/인증 헬퍼 ──
+    const getToken = () => localStorage.getItem("consult_token");
+    const setToken = (t) => localStorage.setItem("consult_token", t);
+    const authHeaders = () => (getToken() ? { Authorization: "Bearer " + getToken() } : {});
+
+    function reflectAuth() {
+      const on = !!getToken();
+      $("loginBar").style.display = on ? "none" : "flex";
+      $("authState").style.display = on ? "inline-flex" : "none";
+    }
+
+    async function login(username, password) {
+      const body = new URLSearchParams({ username, password });
+      const r = await fetch("/api/auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || "HTTP " + r.status);
+      setToken(d.access_token);
+      reflectAuth();
+    }
+
+    // ── 공통 JSON POST (auth 첨부, 오류 throw) ──
+    async function apiPost(url, bodyObj) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(bodyObj),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || "HTTP " + r.status);
+      return d;
+    }
+
+    // ── 유틸 ──
+    const fmtWon = (n) => Number(n || 0).toLocaleString("ko-KR");
+    const esc = (s) =>
+      String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const fmtVal = (v) => (typeof v === "number" ? fmtWon(v) + " 원" : esc(v));
+
+    function startLoading(btn, text) {
+      btn.dataset.orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + text;
+    }
+    function stopLoading(btn) {
+      btn.disabled = false;
+      if (btn.dataset.orig) btn.innerHTML = btn.dataset.orig;
+    }
+
+    // ── Panel B: 대사 결과 반영(차액≠0 → 붉은 경고, 0 → 초록 일치) ──
+    function toggleVariance(recon) {
+      const variance = Number(recon.unallocated_cash_sales || 0);
+      const hasError = !!recon.reconciliation_error || variance !== 0 || recon.matched === false;
+      const w = $("varianceWidget");
+      if (hasError) {
+        w.className = "rounded-xl border-2 border-red-300 bg-red-50 p-4";
+        w.innerHTML =
+          '<p class="text-xs text-red-600 font-semibold flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> 미분류 차액 (Variance)</p>' +
+          '<p class="mt-2 text-2xl font-extrabold text-red-600 tabular-nums">' + fmtWon(variance) +
+          '<span class="text-sm font-medium text-red-400 ml-1">원</span></p>' +
+          '<p class="text-xs text-red-500 mt-1">unallocated_cash_sales · 현금매출 누락 추정</p>';
+        $("varianceMsg").innerHTML =
+          "<strong>대사 불일치(reconciliation_error) 감지.</strong> 통장 총매출과 POS 합산의 차액 " +
+          fmtWon(variance) + "원이 품목에 매칭되지 않았습니다. 미분류 현금매출로 분류하거나 원시 데이터를 재검토하세요.";
+        $("varianceBanner").style.display = "flex";
+        $("matchBanner").style.display = "none";
+      } else {
+        w.className = "rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4";
+        w.innerHTML =
+          '<p class="text-xs text-emerald-600 font-semibold flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> 미분류 차액 (Variance)</p>' +
+          '<p class="mt-2 text-2xl font-extrabold text-emerald-600 tabular-nums">0<span class="text-sm font-medium text-emerald-400 ml-1">원</span></p>' +
+          '<p class="text-xs text-emerald-500 mt-1">대사 일치 · 정합</p>';
+        $("varianceBanner").style.display = "none";
+        $("matchBanner").style.display = "flex";
+      }
+    }
+
+    // ── Panel B: schema_extensions[] 동적 테이블 렌더 ──
+    function renderExtensions(list) {
+      const tb = $("extTbody");
+      tb.innerHTML = "";
+      if (!list || !list.length) {
+        tb.innerHTML =
+          '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-400 text-sm">감지된 확장 스키마 없음</td></tr>';
+        return;
+      }
+      for (const x of list) {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50";
+        tr.innerHTML =
+          '<td class="px-4 py-3 font-mono text-brand-700">' + esc(x.generated_key) + "</td>" +
+          '<td class="px-4 py-3 text-slate-700">' + esc(x.korean_name) + "</td>" +
+          '<td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">' +
+          esc(x.target_sheet) + "</span></td>" +
+          '<td class="px-4 py-3 text-right tabular-nums font-medium text-slate-800">' + fmtVal(x.value) + "</td>";
+        tb.appendChild(tr);
+      }
+    }
+
+    function resetForm() {
+      currentParsedData = null;
+      $("rawDataInput").value = "";
+      $("reviewInput").value = "";
+      $("signatureInput").value = "";
+      $("kpiSource").textContent = "0";
+      $("kpiPos").textContent = "0";
+      toggleVariance({ unallocated_cash_sales: 0, matched: true, reconciliation_error: false });
+      $("extTbody").innerHTML =
+        '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-400 text-sm">파싱 대기 중</td></tr>';
+    }
+
+    // ── Step 1: 파싱 및 오차 검증 ──
+    async function onParse() {
+      const btn = $("btnParse");
+      if (!getToken()) { alert("먼저 우측 상단에서 로그인해주세요."); return; }
+      const opt = $("clientSelect").selectedOptions[0];
+      const client_id = opt.dataset.cid;                 // 문자 라벨 (parse 용)
+      const period = $("periodInput").value.trim();
+      const raw_text = $("rawDataInput").value.trim();
+      if (!raw_text) { alert("원시 데이터(Raw Data)를 입력해주세요."); return; }
+
+      startLoading(btn, "파싱 중...");
+      try {
+        const res = await apiPost("/api/consulting/parse", { client_id, period, raw_text });
+        currentParsedData = res;                          // pl_raw/bs_raw 등 초안 보관
+        const r = res.reconciliation || {};
+        $("kpiSource").textContent = fmtWon(r.source_raw_sum);
+        $("kpiPos").textContent = fmtWon(r.item_revenue);
+        toggleVariance(r);
+        renderExtensions(res.schema_extensions);
+        $("panelB").scrollIntoView({ behavior: "smooth" });
+      } catch (e) {
+        alert("파싱/대사 실패: " + e.message);
+      } finally {
+        stopLoading(btn);
+      }
+    }
+
+    // ── Step 3: §0.5 최종 승인 → compute 이관 ──
+    async function onApprove() {
+      const btn = $("btnApprove");
+      const signature = $("signatureInput").value.trim();
+      if (!signature) { alert("검수자 서명을 입력해주세요."); return; }
+      if (!currentParsedData) { alert("먼저 Step 1에서 원시 데이터를 파싱해주세요."); return; }
+
+      const client_id = parseInt($("clientSelect").value, 10);   // 정수 DB id (ingest 용)
+      const period = $("periodInput").value.trim();
+
+      startLoading(btn, "분석 엔진 가동 중...");
+      try {
+        // 확정 초안 유입. review/signature 는 감사용(현재 ingest 는 무시 — 무해).
+        await apiPost("/api/consulting/ingest", {
+          client_id,
+          period,
+          pl_raw: currentParsedData.pl_raw,
+          bs_raw: currentParsedData.bs_raw,
+          reviewer: signature,
+          review_note: $("reviewInput").value.trim(),
+        });
+        alert("최종 승인 완료! 4-Agent 분석이 백그라운드에서 시작되었습니다.");
+        resetForm();
+      } catch (e) {
+        alert("최종 승인/이관 실패: " + e.message);
+      } finally {
+        stopLoading(btn);
+      }
+    }
+
+    // ── 초기화 ──
+    document.addEventListener("DOMContentLoaded", () => {
+      reflectAuth();
+      $("btnLogin").addEventListener("click", async () => {
+        try { await login($("loginUser").value, $("loginPass").value); }
+        catch (e) { alert("로그인 실패: " + e.message); }
+      });
+      $("btnParse").addEventListener("click", onParse);
+      $("btnApprove").addEventListener("click", onApprove);
+    });
+  </script>
 </body>
 </html>
