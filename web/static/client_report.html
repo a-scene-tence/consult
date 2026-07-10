@@ -207,10 +207,10 @@
       root.classList.add("flex");
     }
 
-    // ── URL 파라미터에서 client_id 추출 (client_id 우선, 없으면 id) ──
-    function getClientId() {
+    // ── URL 파라미터에서 공유 토큰 추출 (IDOR 방어: 정수 id 미사용, token 전용) ──
+    function getToken() {
       const q = new URLSearchParams(window.location.search);
-      return q.get("client_id") || q.get("id");
+      return q.get("token");
     }
 
     // ── dashboard_payload 유틸 ──
@@ -274,15 +274,15 @@
 
     // ── 비동기 로드 흐름 ──
     async function loadReport() {
-      const clientId = getClientId();
-      if (!clientId) {
+      const token = getToken();
+      if (!token) {
         showError("잘못된 접근입니다. 리포트 링크를 다시 확인해주세요.");
         return;
       }
       try {
-        // 사장님 공개 조회(무인증) — 최신 발행 리포트(dashboard_payload)
+        // 사장님 공개 조회(무인증, 추측 불가 토큰) — 최신 발행 리포트(dashboard_payload)
         const r = await fetch(
-          "/api/consulting/reports/" + encodeURIComponent(clientId) + "/latest"
+          "/api/consulting/reports/shared/" + encodeURIComponent(token) + "/latest"
         );
         if (r.status === 404) {
           showError("아직 리포트가 생성 중입니다. 세무 파트너에게 문의해주세요.");

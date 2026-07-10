@@ -141,6 +141,17 @@ def record_feedback(session_factory: Any, draft_id: int, feedback: dict[str, Any
         session.commit()
 
 
+def client_id_from_token(session_factory: Any, token: str) -> int | None:
+    """공개 리포트 토큰(report_token)으로 고객 정수 id 를 해석한다(IDOR 방어).
+
+    일치 고객이 없으면 None(라우터에서 404). 조회만 하며 수치와 무관(Strict Rule 무영향).
+    """
+    with session_factory() as session:
+        return session.execute(
+            select(Client.id).where(Client.report_token == token)
+        ).scalar_one_or_none()
+
+
 def get_dashboard(session_factory: Any, client_id: int) -> dict[str, Any] | None:
     """고객용 대시보드 페이로드(최신 발행본)."""
     with session_factory() as session:

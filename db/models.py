@@ -10,6 +10,7 @@ CHECK 제약으로 강제하여, 애플리케이션 버그가 잘못된 상태 �
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
@@ -121,6 +122,10 @@ class Client(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)  # 대표자명
+    # 공개 리포트 조회용 추측 불가 토큰 — IDOR 방어(정수 id 미노출). INSERT 시 자동 생성.
+    report_token: Mapped[str] = mapped_column(
+        String(32), unique=True, index=True, default=lambda: uuid4().hex
+    )
     # CRM 프로필 (등록 시 필수 — 기존 행 호환을 위해 컬럼 자체는 nullable)
     trade_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 상호(PII)
     industry: Mapped[str | None] = mapped_column(String(64), nullable=True)
