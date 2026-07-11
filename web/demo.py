@@ -137,3 +137,27 @@ def make_demo_orchestrator(store: Any) -> Orchestrator:
         store, pl_fn=_demo_pl, bs_fn=_demo_bs, report_fn=_demo_report,
         publish_fn=_demo_final, case_store=None,
     )
+
+
+# 데모 고객 프로필에서 create_client 로 넘길 필드(seed_demo.py 와 동일).
+_DEMO_PROFILE_FIELDS = (
+    "trade_name", "industry", "district_type", "location_raw",
+    "owner_gender", "owner_age", "owner_age_band", "risk_appetite",
+)
+
+
+def seed_demo_client(session_factory: Any) -> int | None:
+    """고객이 하나도 없을 때만 데모 고객 1건을 시드한다(멱등 — 있으면 None).
+
+    조종석 드롭다운이 비어 있지 않도록 기동 시 호출(DEMO_MODE 게이트). 이미 고객이 있으면
+    아무 것도 만들지 않는다(중복 방지).
+    """
+    from compute.ingest import sample_client_profile
+    from web.services import create_client, list_clients
+
+    if list_clients(session_factory):
+        return None
+    profile = sample_client_profile()
+    body: dict[str, Any] = {"name": "김사장(데모)"}
+    body.update({k: profile[k] for k in _DEMO_PROFILE_FIELDS if k in profile})
+    return create_client(session_factory, body)

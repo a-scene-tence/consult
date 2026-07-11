@@ -74,3 +74,27 @@ def test_demo_mode_off_uses_prod_factory(monkeypatch):
 
     app = create_app(session_factory=_fresh_sf())  # 주입 없음 + DEMO OFF
     assert app.state.make_orchestrator is make_prod_orchestrator  # 훅 미동작(운영 경로)
+
+
+def test_demo_mode_autoseeds_client(monkeypatch):
+    """DEMO_MODE=1 이면 기동 시 데모 고객 1건 자동 시드 → 드롭다운 채워짐."""
+    monkeypatch.setenv("DEMO_MODE", "1")
+    monkeypatch.setenv("JWT_SECRET", "demo-secret")
+    from fastapi.testclient import TestClient
+
+    app = create_app(session_factory=_fresh_sf())  # 고객 미시드 sf → 기동 시 자동 시드
+    c = TestClient(app)
+    tok = c.post("/api/auth/token", data={"username": "admin", "password": "admin-secret"}).json()["access_token"]
+    r = c.get("/api/clients", headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 200
+    assert len(r.json()) >= 1  # 자동 시드된 데모 고객이 목록에 존재
+
+
+def test_demo_mode_off_no_autoseed(monkeypatch):
+    """DEMO OFF 면 자동 시드 미동작(고객 0명)."""
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    from web.services import list_clients
+
+    sf = _fresh_sf()
+    create_app(session_factory=sf)
+    assert list_clients(sf) == []  # 자동 시드 없음

@@ -156,7 +156,14 @@
             </div>
 
             <label class="block">
-              <span class="text-sm font-medium text-slate-700">원시 데이터 (Raw Data)</span>
+              <span class="flex items-center justify-between">
+                <span class="text-sm font-medium text-slate-700">원시 데이터 (Raw Data)</span>
+                <!-- 데모 편의: 클릭 시 현실적인 예시 원시 텍스트를 채운다(fillSampleRaw) -->
+                <button type="button" id="btnFillSample"
+                  class="text-xs text-brand-600 hover:text-brand-700 hover:underline">
+                  <i class="fa-solid fa-flask mr-1"></i>예시 데이터 채우기
+                </button>
+              </span>
               <textarea id="rawDataInput" rows="7"
                 class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
                 placeholder="예)&#10;07/01 후라이드치킨(반반) 18,000원 x 3건&#10;07/01 콜라(병) 2,000원 x 5건&#10;배달의민족 정산 배달수수료 8,200,000원 차감&#10;세금계산서 생닭 매입 41,000,000원&#10;소상공인 방역지원금 2,000,000원 입금"></textarea>
@@ -552,9 +559,28 @@
       }
     }
 
+    // ── 데모 편의: 예시 원시 데이터 채우기 ──
+    // DEMO_MODE 파서는 내용과 무관하게 대사 일치 초안을 반환하므로, 이 텍스트는 "붙여넣을 거리"용.
+    function fillSampleRaw() {
+      $("rawDataInput").value = [
+        "[2025년 3분기 POS/지출 원시내역 — 홍길동치킨]",
+        "07/01 후라이드치킨(반반) 18,000원 x 42건",
+        "07/01 콜라(병) 2,000원 x 33건",
+        "07/12 양념치킨 19,000원 x 28건",
+        "배달의민족 정산 배달수수료 8,200,000원 차감",
+        "세금계산서 생닭 매입 41,000,000원",
+        "임차료 6,000,000원 지출",
+        "○○은행 운전자금대출 잔액 60,000,000원 (월 상환 1,850,000원)",
+        "소상공인 방역지원금 2,000,000원 입금",
+        "통장 총매출 입금 70,200,000원",
+      ].join("\n");
+      if (!$("periodInput").value.trim()) $("periodInput").value = "2025-Q3";
+    }
+
     // ── 초기화 ──
     document.addEventListener("DOMContentLoaded", () => {
       reflectAuth();
+      $("btnFillSample").addEventListener("click", fillSampleRaw);
       if (getToken()) loadClientList();          // 새로고침 시 토큰 있으면 즉시 로드
       $("btnLogin").addEventListener("click", async () => {
         try {

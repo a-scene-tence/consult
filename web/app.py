@@ -88,6 +88,18 @@ def create_app(
         except Exception:  # noqa: BLE001 — 시드 실패가 기동을 막지 않도록
             logging.getLogger(__name__).warning("기본 사용자 시드 실패", exc_info=True)
 
+    # 데모 모드: 고객이 없으면 데모 고객 1건 자동 시드 → 조종석 드롭다운 즉시 채워짐(멱등).
+    if _demo:
+        try:
+            from db.session import create_all
+            from web.demo import seed_demo_client
+
+            with session_factory() as _s:
+                create_all(_s.get_bind())  # DEMO_MODE 단독 기동에서도 테이블 보장
+            seed_demo_client(session_factory)
+        except Exception:  # noqa: BLE001 — 데모 고객 시드 실패가 기동을 막지 않도록
+            logging.getLogger(__name__).warning("데모 고객 시드 실패", exc_info=True)
+
     app = FastAPI(title="consult — 영세사업자 재무 컨설팅")
     app.state.session_factory = session_factory
     app.state.make_orchestrator = make_orchestrator

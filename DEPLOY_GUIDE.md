@@ -50,14 +50,16 @@ docker-compose -f docker-compose.sqlite.yml up -d --build
 pip install -e .
 export DATABASE_URL="sqlite:///./demo.db"
 export SEED_USERS=1 DEMO_MODE=1
-python scripts/seed_demo.py     # 데모 고객 + 발행 리포트 프리로드(+공유 링크 출력)
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 - 포트 8000 을 열고 **`/static/index.html`** 로그인(`admin` / `admin-secret`).
-- 드롭다운에서 데모 고객 선택 → **파싱 → 승인 → 발행**을 직접 클릭(키 없이 동작).
-- `python scripts/seed_demo.py` 가 출력한 **사장님 리포트 공유 링크**(`/static/client_report.html?token=...`)
-  로 모바일 리포트도 즉시 확인.
+- **드롭다운에 데모 고객이 자동으로 등장**합니다(DEMO_MODE 가 고객이 없으면 1건 자동 시드).
+- 원시 데이터 칸의 **"예시 데이터 채우기"** 버튼을 누르면 예시 텍스트가 채워집니다 →
+  **파싱 → 승인 → 발행**을 직접 클릭(키 없이 동작).
+- (선택) 미리 **발행된 리포트 + 공유 링크**를 바로 보고 싶다면:
+  `python scripts/seed_demo.py` — 발행까지 끝낸 데모 고객을 만들고
+  **사장님 리포트 공유 링크**(`/static/client_report.html?token=...`)를 출력합니다.
 
 > ⚠️ **`DEMO_MODE` 는 데모 전용**입니다(고정 예시 반환 — 실제 분석 아님). 운영에서는 절대 켜지 마세요.
 
