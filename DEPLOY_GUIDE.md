@@ -41,6 +41,31 @@ docker-compose -f docker-compose.sqlite.yml up -d --build
 
 ---
 
+## 2-B. GitHub Codespaces 에서 실행
+
+Codespaces 에서는 무거운 docker 빌드 대신 **uvicorn 을 직접 띄우는 것이 가장 빠릅니다**
+(코어 의존만 설치 — chromadb 제외):
+
+```bash
+cd /workspaces/consult
+pip install -e .                       # 최초 1회
+export DATABASE_URL="sqlite:///./consult.db"
+export SEED_USERS=1                     # 기동 시 테이블 생성 + admin 계정 시드
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+그러면 Codespaces 가 **포트 8000** 을 자동 전달합니다. 포트 패널에서 8000 을 열어 접속하세요.
+
+> ⚠️ **포트를 잘못 열면 "Cannot GET /" 만 뜹니다.** 이는 우리 앱이 아니라 **VS Code 서버 자체**의
+> 응답입니다. 포트 패널의 **"실행 중인 프로세스"** 열을 보고, `/vscode/bin/...` 로 시작하는 포트(예:
+> 53283 등)는 열지 마세요. **실행 프로세스가 `uvicorn`/`python` 인 8000 포트**를 여는 것이 맞습니다.
+> 8000 이 목록에 아예 없다면 앱이 아직 안 뜬 것이니 위 명령의 터미널 로그를 확인하세요.
+
+- `DATABASE_URL` 은 필수입니다(기본값 없음). SQLite 파일 경로로 지정하세요.
+- `SEED_USERS=1` 이면 alembic 없이도 부팅 시 테이블·데모 계정을 만들어 바로 로그인됩니다.
+
+---
+
 ## 3. 접속
 
 | 화면 | URL |
