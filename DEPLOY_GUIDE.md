@@ -88,6 +88,14 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 - `DATABASE_URL` 은 필수입니다(기본값 없음). SQLite 파일 경로로 지정하세요.
 - `SEED_USERS=1` 이면 alembic 없이도 부팅 시 테이블·데모 계정을 만들어 바로 로그인됩니다.
 
+### 페이지 대신 HTML 이 "다운로드" 될 때
+포트를 열었더니 렌더 대신 **`index.html` 다운로드** 프롬프트가 뜨는 경우가 있습니다.
+- **원인:** 서버는 정상입니다(`Content-Type: text/html`). GitHub Codespaces 가 **Private 로 포워딩된
+  포트의 HTML 을 브라우저에서 다운로드로 처리**하기 때문입니다(anti-abuse).
+- **해결:** PORTS(포트) 패널에서 **8000** 을 우클릭 → **Port Visibility → Public** 으로 변경하면
+  브라우저가 그대로 렌더합니다. (또는 포트 행의 **지구본(Open in Browser)** 아이콘으로 열기.)
+- **보안 주의:** Public 은 URL 을 아는 누구나 접근 가능 → 데모/개인용에서만 쓰고, 끝나면 Private 로 되돌리세요.
+
 ---
 
 ## 3. 접속
