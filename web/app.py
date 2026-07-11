@@ -6,6 +6,7 @@ fake 에이전트 + SQLite + InMemoryCaseStore 를 주입해 실제 Claude 호�
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -57,6 +58,19 @@ def create_app(
         parse_fn = parse_raw  # Agent 0(데이터 엔지니어) — 원시→표준화 초안 파싱
 
     configure_logging()  # 구조적 로깅(cid/did) 포맷 설치
+
+    # 옵트인 부트스트랩: SEED_USERS 활성 시 테이블 보장 + 기본 계정 시드(로컬/단일 컨테이너에서
+    # 즉시 로그인 가능). 운영(SEED_USERS 미설정/0)은 무동작 — alembic + 명시 시드를 따른다.
+    if os.environ.get("SEED_USERS", "").strip().lower() in ("1", "true", "yes"):
+        try:
+            from db.session import create_all
+            from web.auth import seed_default_users
+
+            with session_factory() as _s:
+                create_all(_s.get_bind())  # checkfirst=True — 멱등(기존 테이블 무변경)
+            seed_default_users(session_factory)  # admin/owner upsert — 멱등
+        except Exception:  # noqa: BLE001 — 시드 실패가 기동을 막지 않도록
+            logging.getLogger(__name__).warning("기본 사용자 시드 실패", exc_info=True)
 
     app = FastAPI(title="consult — 영세사업자 재무 컨설팅")
     app.state.session_factory = session_factory

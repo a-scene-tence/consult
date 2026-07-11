@@ -47,6 +47,17 @@ docker-compose -f docker-compose.sqlite.yml up -d --build
 
 - 데모 계정: **admin / admin-secret** (관리자). 운영에서는 시드를 끄고 실제 계정을 발급하세요.
 
+### 로그인이 안 될 때
+로그인 실패는 대부분 **DB에 계정이 시드되지 않은** 경우입니다.
+- 단일 컨테이너/프로덕션 compose 는 `SEED_USERS=1` 이라 기동 시 자동으로 `admin` 계정이 생성됩니다.
+- **로컬에서 직접 실행**(`uvicorn main:app`)한다면 시드가 없어 로그인이 안 됩니다. 아래 중 하나로 해결:
+  ```bash
+  SEED_USERS=1 uvicorn main:app --host 0.0.0.0 --port 8000   # 기동 시 테이블 생성+계정 시드
+  # 또는 수동 시드
+  python scripts/seed_users.py
+  ```
+  `SEED_USERS=1` 이면 앱이 부팅 시 테이블을 보장하고 `admin/admin-secret` 을 시드합니다(멱등).
+
 ---
 
 ## 4. 데이터 지속(Persistence)
