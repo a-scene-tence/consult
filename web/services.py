@@ -70,7 +70,13 @@ def list_clients(session_factory: Any) -> list[dict[str, Any]]:
     with session_factory() as session:
         rows = session.execute(select(Client).order_by(Client.id)).scalars().all()
         return [
-            {"id": c.id, "client_id": f"C-{c.id}", "name": c.name, "trade_name": c.trade_name}
+            {
+                "id": c.id,
+                "client_id": f"C-{c.id}",
+                "name": c.name,
+                "trade_name": c.trade_name,
+                "report_token": c.report_token,  # 카카오톡 공유 링크 조합용
+            }
             for c in rows
         ]
 

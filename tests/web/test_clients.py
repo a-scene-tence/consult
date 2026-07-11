@@ -44,6 +44,7 @@ def test_list_clients_returns_bridge_fields(client):
         assert "name" in row
         assert "trade_name" in row                    # 상호명 필드 존재(식별용)
         assert row["trade_name"] == PROFILE["trade_name"]
+        assert row["report_token"] and len(row["report_token"]) == 32  # 공유 링크 토큰
     assert by_id[id1]["name"] == "김사장"
 
 
