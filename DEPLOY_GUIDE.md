@@ -41,6 +41,28 @@ docker-compose -f docker-compose.sqlite.yml up -d --build
 
 ---
 
+## 2-A. 데모 데이터로 직접 구동 (API 키 불필요)
+
+`ANTHROPIC_API_KEY` 없이도 조종석·모바일 리포트를 **끝까지 직접 클릭**해 보고 싶다면 `DEMO_MODE=1`
+로 띄우세요. 실제 LLM 대신 **결정론적 예시 결과**를 반환해 파싱→분석→발행 전 과정이 동작합니다.
+
+```bash
+pip install -e .
+export DATABASE_URL="sqlite:///./demo.db"
+export SEED_USERS=1 DEMO_MODE=1
+python scripts/seed_demo.py     # 데모 고객 + 발행 리포트 프리로드(+공유 링크 출력)
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+- 포트 8000 을 열고 **`/static/index.html`** 로그인(`admin` / `admin-secret`).
+- 드롭다운에서 데모 고객 선택 → **파싱 → 승인 → 발행**을 직접 클릭(키 없이 동작).
+- `python scripts/seed_demo.py` 가 출력한 **사장님 리포트 공유 링크**(`/static/client_report.html?token=...`)
+  로 모바일 리포트도 즉시 확인.
+
+> ⚠️ **`DEMO_MODE` 는 데모 전용**입니다(고정 예시 반환 — 실제 분석 아님). 운영에서는 절대 켜지 마세요.
+
+---
+
 ## 2-B. GitHub Codespaces 에서 실행
 
 Codespaces 에서는 무거운 docker 빌드 대신 **uvicorn 을 직접 띄우는 것이 가장 빠릅니다**

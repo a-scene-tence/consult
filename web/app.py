@@ -48,14 +48,30 @@ def create_app(
 ) -> FastAPI:
     """FastAPI 앱 생성. 미주입 시 운영 기본값(실제 Agent + DATABASE_URL)을 사용한다."""
     session_factory = session_factory or _default_session_factory()
+
+    # 데모 모드: 명시 주입이 없고 DEMO_MODE 가 켜져 있으면 결정론적 canned 배선을 사용한다
+    # (API 키 없이 파싱→분석→발행을 직접 클릭 가능). 운영은 절대 켜지 말 것.
+    from web.demo import is_demo_mode
+
+    _demo = is_demo_mode()
     if make_orchestrator is None:
-        from web.production import make_prod_orchestrator
+        if _demo:
+            from web.demo import make_demo_orchestrator
 
-        make_orchestrator = make_prod_orchestrator  # 실 Agent + celery-aware 적재 훅
+            make_orchestrator = make_demo_orchestrator
+        else:
+            from web.production import make_prod_orchestrator
+
+            make_orchestrator = make_prod_orchestrator  # 실 Agent + celery-aware 적재 훅
     if parse_fn is None:
-        from agents.data_engineer import parse_raw
+        if _demo:
+            from web.demo import demo_parse_fn
 
-        parse_fn = parse_raw  # Agent 0(데이터 엔지니어) — 원시→표준화 초안 파싱
+            parse_fn = demo_parse_fn
+        else:
+            from agents.data_engineer import parse_raw
+
+            parse_fn = parse_raw  # Agent 0(데이터 엔지니어) — 원시→표준화 초안 파싱
 
     configure_logging()  # 구조적 로깅(cid/did) 포맷 설치
 
