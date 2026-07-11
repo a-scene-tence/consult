@@ -89,12 +89,20 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 - `SEED_USERS=1` 이면 alembic 없이도 부팅 시 테이블·데모 계정을 만들어 바로 로그인됩니다.
 
 ### 페이지 대신 HTML 이 "다운로드" 될 때
-포트를 열었더니 렌더 대신 **`index.html` 다운로드** 프롬프트가 뜨는 경우가 있습니다.
-- **원인:** 서버는 정상입니다(`Content-Type: text/html`). GitHub Codespaces 가 **Private 로 포워딩된
-  포트의 HTML 을 브라우저에서 다운로드로 처리**하기 때문입니다(anti-abuse).
-- **해결:** PORTS(포트) 패널에서 **8000** 을 우클릭 → **Port Visibility → Public** 으로 변경하면
-  브라우저가 그대로 렌더합니다. (또는 포트 행의 **지구본(Open in Browser)** 아이콘으로 열기.)
-- **보안 주의:** Public 은 URL 을 아는 누구나 접근 가능 → 데모/개인용에서만 쓰고, 끝나면 Private 로 되돌리세요.
+포트를 열었더니 렌더 대신 **다운로드** 프롬프트가 뜨는 경우가 있습니다. 서버는 정상입니다
+(`Content-Type: text/html`, 첨부 헤더 없음 — 실측 확인). 일부 브라우저/프록시(특히 **iPad Safari +
+Codespaces**)가 **URL 이 `.html` 로 끝나는 응답을 파일로 처리**하거나, Private 포트 HTML 을 다운로드로
+넘기기 때문입니다. 아래 순서로 해결하세요.
+
+1. **확장자 없는 URL 로 접속(권장):** `.../static/index.html` 대신 **`.../cockpit`** 을 여세요.
+   (사장님 리포트는 `.../report?token=...` — 조종석의 "공유 링크 복사" 버튼이 이미 이 형식으로 만듭니다.)
+2. **(가장 확실) VS Code Simple Browser:** `Ctrl/Cmd+Shift+P` → **"Simple Browser: Show"** →
+   `http://localhost:8000/cockpit` 입력 → 에디터 안에서 렌더됩니다(Safari/프록시 우회).
+3. **포트 Public 전환:** PORTS 패널에서 **8000** 우클릭 → **Port Visibility → Public**.
+   (Public 은 URL 을 아는 누구나 접근 가능 → 데모/개인용만, 끝나면 Private 로 되돌리기.)
+4. **원인 확정(터미널):** `curl -sI http://localhost:8000/cockpit` →
+   `200` + `content-type: text/html` + `server: uvicorn` 이면 서버 정상(→ 1·2번 사용). 연결 거부면
+   uvicorn 이 안 떠 있는 것(→ 재시작). `content-disposition` 이 보이면 그 값을 알려주세요.
 
 ---
 

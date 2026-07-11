@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi.errors import RateLimitExceeded
@@ -146,6 +146,16 @@ def create_app(
     static_dir = _WEB_DIR / "static"
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    # 확장자 없는 페이지 라우트 — 일부 브라우저/프록시(예: Codespaces + Safari)는 URL 이 `.html` 로
+    # 끝나면 렌더 대신 파일 다운로드로 처리한다. 동일 HTML 을 확장자 없는 경로로도 제공한다.
+    @app.get("/cockpit")
+    async def cockpit():  # noqa: ANN202 — 조종석(백오피스 index.html)
+        return FileResponse(static_dir / "index.html", media_type="text/html")
+
+    @app.get("/report")
+    async def report():  # noqa: ANN202 — 사장님 모바일 리포트(?token= 은 클라이언트 JS 가 읽음)
+        return FileResponse(static_dir / "client_report.html", media_type="text/html")
 
     # 페이지(HTML) 라우트 — 데이터는 클라이언트 JS 가 API fetch.
     @app.get("/")
