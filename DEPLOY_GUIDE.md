@@ -28,9 +28,12 @@ SEED_USERS=1
 ## 2. 구동 — 한 줄 명령
 
 ```bash
+git pull                                             # 최신 requirements.txt 로 빌드(의존성 고정 반영)
 docker-compose -f docker-compose.sqlite.yml up -d --build
 ```
 
+- 이미지는 RAG(ChromaDB)까지 포함해 다소 무겁습니다. RAG 를 쓰지 않는다면(`RAG_ENABLED` 미설정)
+  `requirements.txt` 의 `chromadb` 라인을 제거해 이미지·빌드 시간을 줄일 수 있습니다.
 - 최초 기동 시 컨테이너가 자동으로 `alembic upgrade head`(DB 스키마 생성)와
   (`SEED_USERS=1`이면) 데모 계정 시드를 수행한 뒤 서버를 띄웁니다.
 - 로그 확인: `docker-compose -f docker-compose.sqlite.yml logs -f consult_app`
