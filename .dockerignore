@@ -12,3 +12,6 @@ venv/
 .chroma/
 tests/
 .claude/
+# 단일 컨테이너 배포 바인드 마운트 데이터(호스트 전용 — 이미지에 포함 금지).
+db_data/
+chroma_data/

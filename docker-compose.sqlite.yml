@@ -1,0 +1,27 @@
+# consult — 단일 컨테이너 SQLite 배포 (Phase 16): docker-compose -f docker-compose.sqlite.yml up -d --build
+# 어떤 서버에서든 명령어 한 줄로 백오피스+사장님 리포트를 구동한다(Postgres/Celery 불필요).
+# 기존 프로덕션 스택은 docker-compose.yml(Postgres+Celery+Redis+Flower) 참조.
+services:
+  consult_app:
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlite
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # SQLite 파일 DB(디렉터리 볼륨에 지속). 슬래시 4개 = 절대경로 /app/db/consult.db.
+      DATABASE_URL: sqlite:////app/db/consult.db
+      # RAG(ChromaDB) 로컬 저장소 — 볼륨에 지속.
+      CHROMA_PERSIST_DIR: /app/chroma
+      # Redis/워커 없는 단일 컨테이너 → 분석은 동기(inline) 실행.
+      TASK_BACKEND: inline
+      # 최초 기동 시 스키마 생성(alembic) + 데모 계정 시드(운영은 SEED_USERS=0).
+      RUN_MIGRATIONS: "1"
+      SEED_USERS: ${SEED_USERS:-1}
+    volumes:
+      # 재시작·재빌드에도 데이터 지속(Local Directory Bind Mount).
+      - ./db_data:/app/db          # 1) SQLite DB 파일(consult.db)
+      - ./chroma_data:/app/chroma  # 2) ChromaDB RAG 데이터
+    restart: unless-stopped

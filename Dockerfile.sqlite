@@ -1,0 +1,29 @@
+# consult — 경량 단일 컨테이너 SQLite 배포 이미지 (Phase 16).
+# 기존 프로덕션 Dockerfile(Postgres/Celery)은 그대로 두고, "docker-compose 한 줄" 배포용으로 분리.
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# 시스템 패키지 업데이트(경량, TLS 인증서만).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 의존성 먼저 설치(레이어 캐시 최적화).
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+
+# 소스 복사. cwd(/app)에서 main·web 패키지가 임포트되므로 별도 pip install 불필요.
+COPY . .
+RUN chmod +x /app/entrypoint.sh
+
+EXPOSE 8000
+
+# entrypoint: DB 연결 대기 → alembic upgrade head(테이블 생성) → (선택) 데모 시드 → CMD exec.
+# SQLite 에도 그대로 동작한다(연결 즉시 성공, 마이그레이션 검증 완료).
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

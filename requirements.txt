@@ -1,0 +1,22 @@
+# consult — 런타임 의존성 (pyproject.toml [project.dependencies] 미러 + RAG용 chromadb).
+# 단일 컨테이너 SQLite 배포(Dockerfile.sqlite)에서 pip install -r 로 설치된다.
+pandas>=2.0
+psycopg2-binary>=2.9
+SQLAlchemy>=2.0
+pydantic>=2.0
+jsonschema>=4.0
+anthropic>=0.40
+python-dotenv>=1.0
+fastapi>=0.110
+uvicorn>=0.29
+jinja2>=3.1
+alembic>=1.13
+PyJWT>=2.8
+celery>=5.3
+redis>=5.0
+passlib[bcrypt]>=1.7
+python-multipart>=0.0.9
+slowapi>=0.1.9
+flower>=2.0
+# RAG(Phase 4) — ChromaDB 로컬 저장소 지속용(pyproject 에선 optional extra).
+chromadb>=0.5
