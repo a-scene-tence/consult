@@ -450,9 +450,12 @@
           '<p class="mt-2 text-2xl font-extrabold text-red-600 tabular-nums">' + fmtWon(variance) +
           '<span class="text-sm font-medium text-red-400 ml-1">원</span></p>' +
           '<p class="text-xs text-red-500 mt-1">unallocated_cash_sales · 현금매출 누락 추정</p>';
-        $("varianceMsg").innerHTML =
-          "<strong>대사 불일치(reconciliation_error) 감지.</strong> 통장 총매출과 POS 합산의 차액 " +
-          fmtWon(variance) + "원이 품목에 매칭되지 않았습니다. 미분류 현금매출로 분류하거나 원시 데이터를 재검토하세요.";
+        // reconciliation_error(matched=false)는 진짜 대사 오류, 그 외(차액>0·matched)는 미분류 현금매출 리스크 플래그.
+        $("varianceMsg").innerHTML = recon.reconciliation_error
+          ? ("<strong>대사 불일치(reconciliation_error) 감지.</strong> 품목 매출이 통장 총매출을 초과하는 등 " +
+             "원시 총합과 정합하지 않습니다. 원시 데이터를 재검토하세요.")
+          : ("<strong>미분류 현금매출 감지.</strong> 통장 총매출과 POS 합산의 차액 " + fmtWon(variance) +
+             "원이 품목(POS)에 매칭되지 않았습니다 — 현금매출 누락 추정. 미분류 현금매출로 분류하거나 원시 데이터를 재검토하세요.");
         $("varianceBanner").style.display = "flex";
         $("matchBanner").style.display = "none";
       } else {
@@ -560,19 +563,21 @@
     }
 
     // ── 데모 편의: 예시 원시 데이터 채우기 ──
-    // DEMO_MODE 파서는 내용과 무관하게 대사 일치 초안을 반환하므로, 이 텍스트는 "붙여넣을 거리"용.
+    // DEMO_MODE 파서는 내용과 무관하게 고정 초안을 반환하므로, 이 텍스트는 "붙여넣을 거리"용.
+    // 서사: 통장 총매출(79,700,000) > POS 합산(70,200,000) → 차액 9,500,000원이 미분류 현금매출로 검출됨.
     function fillSampleRaw() {
       $("rawDataInput").value = [
         "[2025년 3분기 POS/지출 원시내역 — 홍길동치킨]",
         "07/01 후라이드치킨(반반) 18,000원 x 42건",
         "07/01 콜라(병) 2,000원 x 33건",
         "07/12 양념치킨 19,000원 x 28건",
+        "POS 합산 매출 70,200,000원 (단가 x 수량 기준)",
         "배달의민족 정산 배달수수료 8,200,000원 차감",
         "세금계산서 생닭 매입 41,000,000원",
         "임차료 6,000,000원 지출",
         "○○은행 운전자금대출 잔액 60,000,000원 (월 상환 1,850,000원)",
         "소상공인 방역지원금 2,000,000원 입금",
-        "통장 총매출 입금 70,200,000원",
+        "통장 총매출 입금 79,700,000원  ← POS 미기록 현금매출 약 9,500,000원 포함(추정)",
       ].join("\n");
       if (!$("periodInput").value.trim()) $("periodInput").value = "2025-Q3";
     }

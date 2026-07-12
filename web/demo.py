@@ -112,11 +112,18 @@ def _demo_final(
 def demo_parse_fn(
     raw_text: str, *, client_id: str, period: str, approved_memory: Any | None = None,
 ) -> dict[str, Any]:
-    """Agent 0 대체 — 원시 텍스트와 무관하게 유효한 parser_output(대사 일치)을 반환한다."""
+    """Agent 0 대체 — 원시 텍스트와 무관하게 유효한 parser_output 을 반환한다.
+
+    **간판 시연:** 통장 총매출(source_raw_sum) > POS 합산(Σ P×Q) → 그 차액을 **미분류 현금매출**
+    (현금매출 누락 추정)로 노출한다. 이는 대사 오류(reconciliation_error)가 아니라 **리스크 플래그**이므로
+    reconcile 상 `matched=True`(unallocated≥0, errors 없음)를 유지한다.
+    """
     sales = [{"item_name": "후라이드치킨", "selling_price": 18000, "unit_cost": 7200, "quantity": 3900}]
-    rev = 18000 * 3900
+    pos_revenue = 18000 * 3900          # POS 합산(Σ 단가×수량) = 70,200,000
+    unallocated = 9_500_000             # 통장에는 있으나 POS 에 없는 현금매출(누락 추정)
+    bank_total = pos_revenue + unallocated  # 통장 총매출(source_raw_sum) = 79,700,000
     return {
-        "info": {"client_id": client_id, "period": period, "business_days": 78, "total_revenue": rev},
+        "info": {"client_id": client_id, "period": period, "business_days": 78, "total_revenue": bank_total},
         "sales": sales,
         "cogs": [{"material_category": "생닭", "amount": 41000000, "prev_amount": 33000000}],
         "opex": [{"account_name": "임차료", "amount": 6000000, "prev_amount": 6000000}],
@@ -127,7 +134,7 @@ def demo_parse_fn(
         "bs": {"total_cash": 24000000, "total_ca": 95000000, "total_cl": 62000000, "total_equity": 86000000},
         "schema_extensions": [{"target_sheet": "OPEX", "generated_key": "government_subsidy",
                                "korean_name": "손실보전금", "value": 3000000}],
-        "raw_total_check": {"source_raw_sum": rev},
+        "raw_total_check": {"source_raw_sum": bank_total},
     }
 
 

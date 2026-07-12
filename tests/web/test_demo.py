@@ -42,10 +42,16 @@ def test_demo_mode_full_flow_without_api_key(monkeypatch):
         "owner_age_band": "40s", "risk_appetite": "moderate",
     }, headers=H).json()["client_id"]
 
-    # 파싱(Agent 0 대체) — 원시 텍스트 무관하게 대사 일치 초안 반환
+    # 파싱(Agent 0 대체) — 원시 텍스트 무관하게 고정 초안 반환.
+    # 간판 시연: 통장 총매출 > POS 합산 → 미분류 현금매출(차액>0)이 검출되되, 이는 오류가 아니라
+    # 리스크 플래그이므로 matched 는 True 를 유지한다.
     pr = c.post("/api/consulting/parse", json={
         "client_id": f"C-{cid}", "period": "2025-Q3", "raw_text": "임의 원시 데이터"}, headers=H).json()
-    assert pr["reconciliation"]["matched"] is True
+    recon = pr["reconciliation"]
+    assert recon["matched"] is True
+    assert recon["reconciliation_error"] is False
+    assert recon["unallocated_cash_sales"] > 0            # 미분류 현금매출 시연이 유지되어야 함
+    assert recon["item_revenue"] < recon["source_raw_sum"]  # POS 합산 < 통장 총매출
 
     did = c.post("/api/consulting/ingest", json={
         "client_id": cid, "period": "2025-Q3",
