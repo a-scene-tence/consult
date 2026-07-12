@@ -123,13 +123,22 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/cockpit
      뜨는지 확인(그 터미널 창을 계속 열어 두기 — 닫으면 서버가 죽습니다).
   3. 그 줄이 안 뜨면 스크립트가 출력한 **오류(traceback)** 를 그대로 공유해 주세요(런처가 의존성은
      자동 설치하므로, 남는 오류가 진짜 원인입니다).
-- **`200` 이 나옴** → 서버는 정상입니다. 그럼 다운로드는 **브라우저 접속 방법** 문제이니 아래로:
-  1. **(가장 확실) VS Code Simple Browser:** `Ctrl/Cmd+Shift+P` → **"Simple Browser: Show"** →
-     `http://localhost:8000/cockpit` 입력 → **에디터 안에서 렌더**됩니다(Safari 새 탭/프록시 우회).
-  2. **확장자 없는 URL 로 접속:** `.../static/index.html` 대신 **`.../cockpit`** 을 여세요.
-     (사장님 리포트는 `.../report?token=...` — 조종석의 "공유 링크 복사" 버튼이 이 형식으로 만듭니다.)
-  3. **포트 Public 전환:** PORTS 패널에서 **8000** 우클릭 → **Port Visibility → Public**.
+- **`200` 이 나옴** → 서버는 정상입니다. 그럼 다운로드/빈 화면은 **브라우저 접속 방법** 문제입니다.
+
+  **📱 iPad(모바일) 정답 — 실측 확정 경로:**
+  1. **PORTS 패널에서 8000 → Port Visibility → Public** 으로 전환.
      (Public 은 URL 을 아는 누구나 접근 가능 → 데모/개인용만, 끝나면 Private 로 되돌리기.)
+  2. **일반 Safari 새 탭**에서 **https 전달 URL** 을 직접 여세요(끝에 `/cockpit`):
+     `https://<코드스페이스이름>-8000.app.github.dev/cockpit` → 조종석 렌더(로그인 admin/admin-secret).
+  - ⚠️ iPad 에서는 **`http://localhost:8000` 이 렌더되지 않습니다.** github.dev 에디터는 https 인데
+    iPad Safari 웹뷰가 **https 안의 `http://localhost`(비보안)를 혼합 콘텐츠로 차단**하기 때문입니다
+    (그래서 Simple Browser 가 **빈 화면**이 됩니다). 반드시 **https 전달 URL** 을 쓰세요.
+  - 사장님 리포트도 같은 https 도메인의 `.../report?token=...` (조종석 "공유 링크 복사" 버튼이 생성).
+
+  **🖥️ 데스크톱 VS Code 전용 — Simple Browser:**
+  `Ctrl/Cmd+Shift+P` → **"Simple Browser: Show"** → `http://localhost:8000/cockpit` 입력 → 에디터 안에서
+  렌더됩니다. (이 방법은 **데스크톱 VS Code 에서만** 동작하며, iPad 웹뷰에서는 위 혼합 콘텐츠 차단으로
+  빈 화면이 되니 iPad 는 위 https 경로를 쓰세요.)
 
 ---
 
@@ -137,10 +146,13 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/cockpit
 
 | 화면 | URL |
 |------|-----|
-| 백오피스(관리자 조종석) | http://localhost:8000/static/index.html |
-| 사장님 모바일 리포트 | 백오피스에서 고객 선택 → **"카카오톡 공유 링크 복사"** 버튼으로 생성된 `?token=...` 링크 |
+| 관리자 조종석(로컬) | http://localhost:8000/cockpit |
+| 관리자 조종석(Codespaces/iPad) | https://&lt;코드스페이스이름&gt;-8000.app.github.dev/cockpit (포트 Public) |
+| 사장님 모바일 리포트 | 조종석에서 고객 선택 → **"카카오톡 공유 링크 복사"** 버튼으로 생성된 `.../report?token=...` 링크 |
 
 - 데모 계정: **admin / admin-secret** (관리자). 운영에서는 시드를 끄고 실제 계정을 발급하세요.
+- **iPad/Codespaces 는 `http://localhost` 가 아니라 `https://…-8000.app.github.dev` (Public 포트)** 로
+  접속하세요(위 2-B "다운로드/빈 화면" 절 참고 — 혼합 콘텐츠 차단 회피).
 
 ### 로그인이 안 될 때
 로그인 실패는 대부분 **DB에 계정이 시드되지 않은** 경우입니다.
