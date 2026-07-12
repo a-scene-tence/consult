@@ -74,7 +74,7 @@
             <p class="text-white text-sm font-medium">김세무 파트너</p>
             <p class="text-slate-400 text-xs">Admin · 세무회계</p>
           </div>
-          <button title="로그아웃" class="text-slate-400 hover:text-white transition">
+          <button id="btnLogout" title="로그아웃" class="text-slate-400 hover:text-white transition">
             <i class="fa-solid fa-right-from-bracket"></i>
           </button>
         </div>
@@ -343,6 +343,12 @@
       $("authState").style.display = on ? "inline-flex" : "none";
     }
 
+    // 세션 만료(401)/로그아웃 → 토큰 비우고 로그인 바 재노출(만료 트랩 방지).
+    function forceRelogin() {
+      localStorage.removeItem("consult_token");
+      reflectAuth();
+    }
+
     async function login(username, password) {
       const body = new URLSearchParams({ username, password });
       const r = await fetch("/api/auth/token", {
@@ -363,6 +369,11 @@
       sel.innerHTML = '<option>고객 목록 로딩 중...</option>';
       try {
         const r = await fetch("/api/clients", { headers: { ...authHeaders() } });
+        if (r.status === 401) {  // 세션 만료 → 로그인 폼 복귀(트랩 방지)
+          forceRelogin();
+          sel.innerHTML = '<option value="">세션이 만료됨 — 우측 상단에서 다시 로그인하세요</option>';
+          return;
+        }
         if (!r.ok) throw new Error("HTTP " + r.status);
         const clients = await r.json();
         sel.innerHTML = "";
@@ -421,6 +432,10 @@
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(bodyObj),
       });
+      if (r.status === 401) {  // 세션 만료 → 로그인 폼 복귀 후 명확히 알림
+        forceRelogin();
+        throw new Error("세션이 만료되었습니다. 우측 상단에서 다시 로그인 후 재시도하세요.");
+      }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail || "HTTP " + r.status);
       return d;
@@ -616,6 +631,10 @@
       });
       $("btnParse").addEventListener("click", onParse);
       $("btnApprove").addEventListener("click", onApprove);
+      $("btnLogout").addEventListener("click", () => {  // 수동 로그아웃 → 로그인 폼 복귀
+        forceRelogin();
+        $("clientSelect").innerHTML = '<option value="">로그인 후 고객이 표시됩니다</option>';
+      });
       $("clientSelect").addEventListener("change", reflectCopyBtn);
       $("btnCopyLink").addEventListener("click", onCopyLink);
       // 발행 완료 후 노출 — 탭(사용자 제스처)으로 새 탭에서 사장님 리포트 열기(팝업 차단 회피).

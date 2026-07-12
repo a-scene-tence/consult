@@ -13,6 +13,7 @@ export DATABASE_URL="${DATABASE_URL:-sqlite:///./demo.db}"
 export SEED_USERS="${SEED_USERS:-1}"
 export DEMO_MODE="${DEMO_MODE:-1}"
 export JWT_SECRET="${JWT_SECRET:-demo-secret-change-me}"
+export JWT_EXPIRE_MINUTES="${JWT_EXPIRE_MINUTES:-720}"   # 데모 편의: 로그인 12시간 유지(운영 기본 120분)
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 
