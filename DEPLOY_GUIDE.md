@@ -48,11 +48,15 @@ docker-compose -f docker-compose.sqlite.yml up -d --build
 
 **가장 간단한 실행 — 원클릭 런처(권장):**
 ```bash
-pip install -e .            # 최초 1회
-bash scripts/run_demo.sh    # 환경변수 설정 + 기동 점검 + uvicorn 실행
+bash scripts/run_demo.sh    # 환경변수 설정 + 기동 점검(+의존성 자동 설치) + uvicorn 실행
 ```
-`run_demo.sh` 는 먼저 **프리플라이트**로 앱이 정상 기동되는지 확인하고(실패 시 원인을 그대로 출력),
-성공하면 uvicorn 을 띄웁니다. 접속 주소(`/cockpit`)와 로그인 정보를 안내합니다.
+`run_demo.sh` 는 먼저 **프리플라이트**로 앱이 정상 기동되는지 확인합니다. 의존성이 안 깔려 있으면
+**`pip install -e .` 를 자동으로 실행**한 뒤 재시도하고, 그래도 실패하면 **진짜 원인(traceback)을 그대로
+출력**합니다. 성공하면 uvicorn 을 띄우며 접속 주소(`/cockpit`)와 로그인 정보를 안내합니다.
+
+> 실행 후 터미널에 **`Uvicorn running on http://0.0.0.0:8000`** 줄이 떠야 서버가 살아있는 것입니다.
+> **그 줄이 안 뜨면** 위에 출력된 오류가 원인입니다. 그리고 **그 터미널 창을 닫거나 `Ctrl+C` 하면 서버가
+> 죽어** 다시 다운로드/빈 화면이 됩니다(그 창을 계속 열어 두세요).
 
 수동으로 실행하려면:
 ```bash
@@ -101,21 +105,31 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 - `DATABASE_URL` 은 필수입니다(기본값 없음). SQLite 파일 경로로 지정하세요.
 - `SEED_USERS=1` 이면 alembic 없이도 부팅 시 테이블·데모 계정을 만들어 바로 로그인됩니다.
 
-### 페이지 대신 HTML 이 "다운로드" 될 때
-포트를 열었더니 렌더 대신 **다운로드** 프롬프트가 뜨는 경우가 있습니다. 서버는 정상입니다
-(`Content-Type: text/html`, 첨부 헤더 없음 — 실측 확인). 일부 브라우저/프록시(특히 **iPad Safari +
-Codespaces**)가 **URL 이 `.html` 로 끝나는 응답을 파일로 처리**하거나, Private 포트 HTML 을 다운로드로
-넘기기 때문입니다. 아래 순서로 해결하세요.
+### 페이지 대신 HTML 이 "다운로드" 될 때 → **십중팔구 서버가 안 떠 있는 것**
+포트를 열었더니 렌더 대신 **다운로드/빈 화면**이 뜬다면, **대부분 8000 포트에 서버가 실제로 안 떠 있는
+경우**입니다. Codespaces 는 서버가 죽은 포트도 목록에 남겨 두고, 그 죽은 포트로 접속하면 **빈 응답이
+내려와 Safari 가 이를 파일 다운로드로 처리**합니다(우리 서버 헤더는 정상 — `Content-Type: text/html`,
+첨부 헤더 없음, 실측 확인). 특히 iPad Safari 에서 PORTS 패널의 **지구본(브라우저에서 열기)** 로
+`about:blank` 새 탭이 열리며 `-8000.app.github.dev` 를 다운로드하려는 팝업이 이 증상입니다.
 
-1. **확장자 없는 URL 로 접속(권장):** `.../static/index.html` 대신 **`.../cockpit`** 을 여세요.
-   (사장님 리포트는 `.../report?token=...` — 조종석의 "공유 링크 복사" 버튼이 이미 이 형식으로 만듭니다.)
-2. **(가장 확실) VS Code Simple Browser:** `Ctrl/Cmd+Shift+P` → **"Simple Browser: Show"** →
-   `http://localhost:8000/cockpit` 입력 → 에디터 안에서 렌더됩니다(Safari/프록시 우회).
-3. **포트 Public 전환:** PORTS 패널에서 **8000** 우클릭 → **Port Visibility → Public**.
-   (Public 은 URL 을 아는 누구나 접근 가능 → 데모/개인용만, 끝나면 Private 로 되돌리기.)
-4. **원인 확정(터미널):** `curl -sI http://localhost:8000/cockpit` →
-   `200` + `content-type: text/html` + `server: uvicorn` 이면 서버 정상(→ 1·2번 사용). 연결 거부면
-   uvicorn 이 안 떠 있는 것(→ 재시작). `content-disposition` 이 보이면 그 값을 알려주세요.
+**먼저 서버가 살아있는지 확정하세요(터미널 한 줄):**
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/cockpit
+```
+- **아무 것도 안 나오거나 `000`/연결 거부** → **서버 미기동**(다운로드의 진짜 원인). 아래로:
+  1. **Codespace 가 켜져 있는지 확인.** idle 30분 등으로 **정지(Stopped)** 되면 포워딩 포트만 남고 서버는
+     죽습니다. github.com/codespaces 에서 해당 Codespace 가 **Active** 인지 보고, 정지면 다시 여세요.
+  2. 터미널에서 **`bash scripts/run_demo.sh`** 실행 → **`Uvicorn running on http://0.0.0.0:8000`** 줄이
+     뜨는지 확인(그 터미널 창을 계속 열어 두기 — 닫으면 서버가 죽습니다).
+  3. 그 줄이 안 뜨면 스크립트가 출력한 **오류(traceback)** 를 그대로 공유해 주세요(런처가 의존성은
+     자동 설치하므로, 남는 오류가 진짜 원인입니다).
+- **`200` 이 나옴** → 서버는 정상입니다. 그럼 다운로드는 **브라우저 접속 방법** 문제이니 아래로:
+  1. **(가장 확실) VS Code Simple Browser:** `Ctrl/Cmd+Shift+P` → **"Simple Browser: Show"** →
+     `http://localhost:8000/cockpit` 입력 → **에디터 안에서 렌더**됩니다(Safari 새 탭/프록시 우회).
+  2. **확장자 없는 URL 로 접속:** `.../static/index.html` 대신 **`.../cockpit`** 을 여세요.
+     (사장님 리포트는 `.../report?token=...` — 조종석의 "공유 링크 복사" 버튼이 이 형식으로 만듭니다.)
+  3. **포트 Public 전환:** PORTS 패널에서 **8000** 우클릭 → **Port Visibility → Public**.
+     (Public 은 URL 을 아는 누구나 접근 가능 → 데모/개인용만, 끝나면 Private 로 되돌리기.)
 
 ---
 
