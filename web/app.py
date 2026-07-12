@@ -149,11 +149,12 @@ def create_app(
 
     # 확장자 없는 페이지 라우트 — 일부 브라우저/프록시(예: Codespaces + Safari)는 URL 이 `.html` 로
     # 끝나면 렌더 대신 파일 다운로드로 처리한다. 동일 HTML 을 확장자 없는 경로로도 제공한다.
-    @app.get("/cockpit")
+    # HEAD 도 허용(헬스체크·`curl -I` 진단이 405 로 오인되지 않도록).
+    @app.api_route("/cockpit", methods=["GET", "HEAD"])
     async def cockpit():  # noqa: ANN202 — 조종석(백오피스 index.html)
         return FileResponse(static_dir / "index.html", media_type="text/html")
 
-    @app.get("/report")
+    @app.api_route("/report", methods=["GET", "HEAD"])
     async def report():  # noqa: ANN202 — 사장님 모바일 리포트(?token= 은 클라이언트 JS 가 읽음)
         return FileResponse(static_dir / "client_report.html", media_type="text/html")
 

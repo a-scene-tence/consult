@@ -46,20 +46,33 @@ docker-compose -f docker-compose.sqlite.yml up -d --build
 `ANTHROPIC_API_KEY` 없이도 조종석·모바일 리포트를 **끝까지 직접 클릭**해 보고 싶다면 `DEMO_MODE=1`
 로 띄우세요. 실제 LLM 대신 **결정론적 예시 결과**를 반환해 파싱→분석→발행 전 과정이 동작합니다.
 
+**가장 간단한 실행 — 원클릭 런처(권장):**
 ```bash
-pip install -e .
+pip install -e .            # 최초 1회
+bash scripts/run_demo.sh    # 환경변수 설정 + 기동 점검 + uvicorn 실행
+```
+`run_demo.sh` 는 먼저 **프리플라이트**로 앱이 정상 기동되는지 확인하고(실패 시 원인을 그대로 출력),
+성공하면 uvicorn 을 띄웁니다. 접속 주소(`/cockpit`)와 로그인 정보를 안내합니다.
+
+수동으로 실행하려면:
+```bash
 export DATABASE_URL="sqlite:///./demo.db"
 export SEED_USERS=1 DEMO_MODE=1
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-- 포트 8000 을 열고 **`/static/index.html`** 로그인(`admin` / `admin-secret`).
+- 포트 8000 을 열고 **`/cockpit`**(또는 `/static/index.html`) 로그인(`admin` / `admin-secret`).
 - **드롭다운에 데모 고객이 자동으로 등장**합니다(DEMO_MODE 가 고객이 없으면 1건 자동 시드).
 - 원시 데이터 칸의 **"예시 데이터 채우기"** 버튼을 누르면 예시 텍스트가 채워집니다 →
   **파싱 → 승인 → 발행**을 직접 클릭(키 없이 동작).
 - (선택) 미리 **발행된 리포트 + 공유 링크**를 바로 보고 싶다면:
   `python scripts/seed_demo.py` — 발행까지 끝낸 데모 고객을 만들고
-  **사장님 리포트 공유 링크**(`/static/client_report.html?token=...`)를 출력합니다.
+  **사장님 리포트 공유 링크**(`/report?token=...`)를 출력합니다.
+
+> **접속했는데 렌더가 안 되거나 다운로드/빈 화면이면** 대개 **앱이 안 떠 있는 것**입니다.
+> 터미널에서 `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/cockpit` →
+> `200` 이면 서버 정상(브라우저 접속 방법 문제 → 아래 2-B 참고), **아무 것도 안 나오거나 000 이면
+> uvicorn 미기동**이므로 `bash scripts/run_demo.sh` 의 프리플라이트 출력을 확인하세요.
 
 > ⚠️ **`DEMO_MODE` 는 데모 전용**입니다(고정 예시 반환 — 실제 분석 아님). 운영에서는 절대 켜지 마세요.
 

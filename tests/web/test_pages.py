@@ -28,3 +28,10 @@ def test_cockpit_and_report_served_as_html():
         assert r.status_code == 200, path
         assert "text/html" in r.headers["content-type"], (path, r.headers["content-type"])
         assert "content-disposition" not in {k.lower() for k in r.headers}
+
+
+def test_cockpit_head_allowed():
+    """HEAD 요청(`curl -I`·헬스체크)도 200 이어야 한다(405 오인 방지)."""
+    c = _client()
+    r = c.head("/cockpit")
+    assert r.status_code == 200
