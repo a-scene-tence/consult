@@ -403,7 +403,15 @@
       const opt = $("clientSelect").selectedOptions[0];
       const has = !!(opt && opt.value);
       $("btnCopyLink").classList.toggle("hidden", !has);
-      $("btnOpenReport").classList.add("hidden");  // 고객 변경 시 이전 발행본 열기 버튼 숨김
+      // 고객 선택 시 '사장님 리포트 열기'도 상시 노출(발행 후 재접속에도 접근 가능).
+      // 미발행이면 리포트 페이지가 "아직 생성 중" 안내를 띄우므로 열어도 안전.
+      const ob = $("btnOpenReport");
+      if (has && opt.dataset.token) {
+        ob.dataset.url = window.location.origin + "/report?token=" + opt.dataset.token;
+        ob.classList.remove("hidden");
+      } else {
+        ob.classList.add("hidden");
+      }
     }
 
     // ── 선택 고객의 사장님 리포트 절대경로 URL 을 클립보드에 복사 ──
@@ -582,10 +590,8 @@
         } catch (e) { /* 운영(비데모)에서는 demo_publish 404 — 백그라운드 분석 흐름 유지 */ }
 
         if (published) {
-          const url = token ? (window.location.origin + "/report?token=" + token) : null;
-          const ob = $("btnOpenReport");
-          if (url) { ob.dataset.url = url; ob.classList.remove("hidden"); }
           resetForm();
+          reflectCopyBtn();  // 선택 고객 기준으로 '사장님 리포트 열기'·'공유 링크 복사' 노출
           alert("✅ 발행 완료! 사장님 모바일 리포트가 생성되었습니다. 좌측 상단 '사장님 리포트 열기' 버튼으로 확인하세요.");
         } else {
           alert("최종 승인 완료! 4-Agent 분석이 백그라운드에서 시작되었습니다.");
