@@ -74,6 +74,61 @@ def test_demo_mode_full_flow_without_api_key(monkeypatch):
     assert len(rep.json()["report_sections"]) == 3  # 데모 리포트 3장 카드
 
 
+def test_demo_publish_one_call_publishes_and_report_available(monkeypatch):
+    """조종석 승인 경로 — parse→ingest→demo_publish 한 번으로 발행되고 공개 리포트가 열린다."""
+    monkeypatch.setenv("DEMO_MODE", "1")
+    monkeypatch.setenv("JWT_SECRET", "demo-secret")
+    from fastapi.testclient import TestClient
+
+    app = create_app(session_factory=_fresh_sf())
+    c = TestClient(app)
+    tok = c.post("/api/auth/token", data={"username": "admin", "password": "admin-secret"}).json()["access_token"]
+    H = {"Authorization": f"Bearer {tok}"}
+    cid = c.post("/api/clients", json={"name": "데모사장", "trade_name": "데모분식", "industry": "분식",
+                                       "district_type": "office", "owner_gender": "male", "owner_age": 41,
+                                       "owner_age_band": "40s", "risk_appetite": "moderate"},
+                 headers=H).json()["client_id"]
+    pr = c.post("/api/consulting/parse", json={
+        "client_id": f"C-{cid}", "period": "2025-Q3", "raw_text": "임의"}, headers=H).json()
+    did = c.post("/api/consulting/ingest", json={
+        "client_id": cid, "period": "2025-Q3", "pl_raw": pr["pl_raw"], "bs_raw": pr["bs_raw"]},
+        headers=H).json()["draft_id"]
+
+    # 승인 한 번(demo_publish) → 발행까지 동기 완료
+    dp = c.post(f"/api/consulting/{did}/demo_publish", headers=H)
+    assert dp.status_code == 200
+    assert dp.json()["status"] == "published"
+
+    # 공개 모바일 리포트가 즉시 열람 가능
+    from web.services import list_clients
+    token = next(x["report_token"] for x in list_clients(app.state.session_factory) if x["id"] == cid)
+    rep = c.get(f"/api/consulting/reports/shared/{token}/latest")
+    assert rep.status_code == 200
+    assert len(rep.json()["report_sections"]) == 3
+
+
+def test_demo_publish_404_when_demo_off(monkeypatch):
+    """운영(비데모)에서는 demo_publish 가 404 — HITL 검수 흐름을 우회하지 않는다."""
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    monkeypatch.setenv("JWT_SECRET", "demo-secret")
+    from fastapi.testclient import TestClient
+
+    # 운영 팩토리는 실제 LLM 오케스트레이터를 요구하므로, 명시 canned 주입으로 앱만 구성.
+    from orchestrator import Orchestrator
+    from web.demo import _demo_bs, _demo_final, _demo_pl, _demo_report
+
+    def _mk(store):
+        return Orchestrator(store, pl_fn=_demo_pl, bs_fn=_demo_bs, report_fn=_demo_report,
+                            publish_fn=_demo_final, case_store=None)
+
+    app = create_app(session_factory=_fresh_sf(), make_orchestrator=_mk)
+    c = TestClient(app)
+    tok = c.post("/api/auth/token", data={"username": "admin", "password": "admin-secret"}).json()["access_token"]
+    H = {"Authorization": f"Bearer {tok}"}
+    # 존재하지 않는 draft 라도 DEMO_MODE 게이트가 먼저 404 를 반환해야 한다.
+    assert c.post("/api/consulting/999/demo_publish", headers=H).status_code == 404
+
+
 def test_demo_mode_off_uses_prod_factory(monkeypatch):
     monkeypatch.delenv("DEMO_MODE", raising=False)
     from web.production import make_prod_orchestrator

@@ -190,3 +190,29 @@ def approve(draft_id: int, request: Request) -> dict[str, Any]:
         "status": "published",
         "dashboard_payload": payload["dashboard_payload"],
     }
+
+
+@router.post("/{draft_id}/demo_publish")
+def demo_publish(draft_id: int, request: Request) -> dict[str, Any]:
+    """데모 전용 — 승인 직후 4-Agent 분석+발행을 **동기**로 끝까지 진행(canned 즉시).
+
+    조종석의 '최종 승인' 한 번으로 사장님 리포트가 발행되어 바로 열람 가능하도록 하는 편의 경로다.
+    DEMO_MODE 가 아니면 404(운영은 HITL 검수 흐름을 우회하지 않는다).
+    """
+    from web.demo import is_demo_mode
+
+    if not is_demo_mode():
+        raise HTTPException(status_code=404, detail="demo_publish 는 DEMO_MODE 에서만 제공됩니다")
+    store = get_store(request)
+    require_draft(store, draft_id)
+    orch = get_orchestrator(request)
+    orch.run_analysis(draft_id)                  # computed → … → review_pending (Agent 1·2·3)
+    # Agent 4(최종본·dashboard_payload)는 피드백 단계에서 생성된다 — 데모는 빈 피드백으로 1회 구동.
+    orch.submit_feedback(draft_id, {"reviewer": "데모 자동승인", "overall_note": None, "instructions": []})
+    orch.approve(draft_id)                        # review_pending → approved
+    payload = orch.publish(draft_id)              # approved → published + KB 적재 훅
+    return {
+        "draft_id": draft_id,
+        "status": "published",
+        "dashboard_payload": payload["dashboard_payload"],
+    }

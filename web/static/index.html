@@ -144,8 +144,11 @@
                 <select id="clientSelect" class="mt-1.5 w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-brand-600 focus:border-brand-600">
                   <option>고객 목록 로딩 중...</option>
                 </select>
-                <!-- 사장님 모바일 리포트 카카오톡 공유 링크 복사(고객 선택 시 노출) -->
-                <button id="btnCopyLink" class="hidden mt-2 text-sm text-blue-600 bg-blue-50 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors border border-blue-200"><i class="fa-solid fa-link mr-1"></i> 카카오톡 공유 링크 복사</button>
+                <!-- 사장님 모바일 리포트: 발행 후 열기 / 카카오톡 공유 링크 복사(고객 선택 시 노출) -->
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <button id="btnOpenReport" class="hidden text-sm text-white bg-emerald-600 px-3 py-1.5 rounded-md hover:bg-emerald-700 transition-colors"><i class="fa-solid fa-mobile-screen-button mr-1"></i> 사장님 리포트 열기</button>
+                  <button id="btnCopyLink" class="hidden text-sm text-blue-600 bg-blue-50 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors border border-blue-200"><i class="fa-solid fa-link mr-1"></i> 카카오톡 공유 링크 복사</button>
+                </div>
               </label>
               <label class="block">
                 <span class="text-sm font-medium text-slate-700">분석 기간</span>
@@ -389,6 +392,7 @@
       const opt = $("clientSelect").selectedOptions[0];
       const has = !!(opt && opt.value);
       $("btnCopyLink").classList.toggle("hidden", !has);
+      $("btnOpenReport").classList.add("hidden");  // 고객 변경 시 이전 발행본 열기 버튼 숨김
     }
 
     // ── 선택 고객의 사장님 리포트 절대경로 URL 을 클립보드에 복사 ──
@@ -538,14 +542,16 @@
       if (!signature) { alert("검수자 서명을 입력해주세요."); return; }
       if (!currentParsedData) { alert("먼저 Step 1에서 원시 데이터를 파싱해주세요."); return; }
 
+      const sel = $("clientSelect").selectedOptions[0];
       const client_id = parseInt($("clientSelect").value, 10);   // 정수 DB id (ingest 용)
       if (!Number.isInteger(client_id)) { alert("고객을 선택하세요."); return; }
+      const token = sel ? sel.dataset.token : null;              // 사장님 리포트 공유 토큰
       const period = $("periodInput").value.trim();
 
       startLoading(btn, "분석 엔진 가동 중...");
       try {
         // 확정 초안 유입. review/signature 는 감사용(현재 ingest 는 무시 — 무해).
-        await apiPost("/api/consulting/ingest", {
+        const ing = await apiPost("/api/consulting/ingest", {
           client_id,
           period,
           pl_raw: currentParsedData.pl_raw,
@@ -553,8 +559,23 @@
           reviewer: signature,
           review_note: $("reviewInput").value.trim(),
         });
-        alert("최종 승인 완료! 4-Agent 분석이 백그라운드에서 시작되었습니다.");
-        resetForm();
+        // 데모: 승인 한 번으로 4-Agent 분석+발행까지 동기 진행(canned 즉시). 운영이면 404 → 스킵.
+        let published = false;
+        try {
+          await apiPost(`/api/consulting/${ing.draft_id}/demo_publish`, {});
+          published = true;
+        } catch (e) { /* 운영(비데모)에서는 demo_publish 404 — 백그라운드 분석 흐름 유지 */ }
+
+        if (published) {
+          const url = token ? (window.location.origin + "/report?token=" + token) : null;
+          const ob = $("btnOpenReport");
+          if (url) { ob.dataset.url = url; ob.classList.remove("hidden"); }
+          resetForm();
+          alert("✅ 발행 완료! 사장님 모바일 리포트가 생성되었습니다. 좌측 상단 '사장님 리포트 열기' 버튼으로 확인하세요.");
+        } else {
+          alert("최종 승인 완료! 4-Agent 분석이 백그라운드에서 시작되었습니다.");
+          resetForm();
+        }
       } catch (e) {
         alert("최종 승인/이관 실패: " + e.message);
       } finally {
@@ -597,6 +618,11 @@
       $("btnApprove").addEventListener("click", onApprove);
       $("clientSelect").addEventListener("change", reflectCopyBtn);
       $("btnCopyLink").addEventListener("click", onCopyLink);
+      // 발행 완료 후 노출 — 탭(사용자 제스처)으로 새 탭에서 사장님 리포트 열기(팝업 차단 회피).
+      $("btnOpenReport").addEventListener("click", () => {
+        const url = $("btnOpenReport").dataset.url;
+        if (url) window.open(url, "_blank");
+      });
     });
   </script>
 </body>
